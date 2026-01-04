@@ -3,6 +3,7 @@ import { ImageUpload } from './components/ImageUpload';
 import { GameSelector } from './components/GameSelector';
 import { ScorecardGallery } from './components/ScorecardGallery';
 import { getScorecards, saveScorecard, deleteScorecard, generateId } from './services/storage';
+import { compressImage } from './utils/imageUtils';
 import type { Game, Scorecard } from './types';
 
 type View = 'gallery' | 'upload';
@@ -13,6 +14,7 @@ function App() {
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [step, setStep] = useState<1 | 2>(1);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setScorecards(getScorecards());
@@ -27,13 +29,17 @@ function App() {
     setSelectedGame(game);
   }, []);
 
-  const handleSave = useCallback(() => {
-    if (!uploadedImage || !selectedGame) return;
+  const handleSave = useCallback(async () => {
+    if (!uploadedImage || !selectedGame || saving) return;
 
+    setSaving(true);
     try {
+      // Compress the image to reduce storage size
+      const compressedImage = await compressImage(uploadedImage, 1200, 0.7);
+
       const newScorecard: Scorecard = {
         id: generateId(),
-        imageUrl: uploadedImage,
+        imageUrl: compressedImage,
         game: selectedGame,
         createdAt: new Date().toISOString(),
       };
@@ -48,9 +54,15 @@ function App() {
       setView('gallery');
     } catch (error) {
       console.error('Failed to save scorecard:', error);
-      alert('Failed to save scorecard. Please try again.');
+      if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+        alert('Storage is full. Please delete some old scorecards to make room.');
+      } else {
+        alert('Failed to save scorecard. Please try again.');
+      }
+    } finally {
+      setSaving(false);
     }
-  }, [uploadedImage, selectedGame]);
+  }, [uploadedImage, selectedGame, saving]);
 
   const handleDelete = useCallback((id: string) => {
     if (confirm('Are you sure you want to delete this scorecard?')) {
@@ -214,14 +226,14 @@ function App() {
                     </button>
                     <button
                       onClick={handleSave}
-                      disabled={!selectedGame || !uploadedImage}
+                      disabled={!selectedGame || !uploadedImage || saving}
                       className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                        selectedGame && uploadedImage
+                        selectedGame && uploadedImage && !saving
                           ? 'bg-green-600 text-white hover:bg-green-700'
                           : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                       }`}
                     >
-                      Save Scorecard
+                      {saving ? 'Saving...' : 'Save Scorecard'}
                     </button>
                   </div>
                 </div>
