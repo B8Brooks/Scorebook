@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import type { Scorecard } from '../types';
+import type { Scorecard, ParsedScorecardData } from '../types';
+import { ScorecardDetail } from './ScorecardDetail';
 
 interface ScorecardGalleryProps {
   scorecards: Scorecard[];
   onDelete: (id: string) => void;
+  onUpdate: (id: string, parsedData: ParsedScorecardData) => void;
 }
 
-export function ScorecardGallery({ scorecards, onDelete }: ScorecardGalleryProps) {
+export function ScorecardGallery({ scorecards, onDelete, onUpdate }: ScorecardGalleryProps) {
   const [selectedCard, setSelectedCard] = useState<Scorecard | null>(null);
 
   const formatDate = (dateString: string) => {
@@ -53,14 +55,19 @@ export function ScorecardGallery({ scorecards, onDelete }: ScorecardGalleryProps
             className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
           >
             <div
-              className="aspect-[4/3] cursor-pointer overflow-hidden"
+              className="aspect-[4/3] cursor-pointer overflow-hidden relative group"
               onClick={() => setSelectedCard(scorecard)}
             >
               <img
                 src={scorecard.imageUrl}
                 alt="Scorecard"
-                className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                <span className="opacity-0 group-hover:opacity-100 bg-white/90 text-gray-900 px-4 py-2 rounded-lg font-medium text-sm transition-opacity">
+                  View Details
+                </span>
+              </div>
             </div>
             <div className="p-4">
               <h3 className="font-semibold text-gray-900">
@@ -77,7 +84,13 @@ export function ScorecardGallery({ scorecards, onDelete }: ScorecardGalleryProps
                   {scorecard.game.teams.home.score}
                 </p>
               )}
-              <div className="mt-3 flex justify-end">
+              <div className="mt-3 flex justify-between items-center">
+                <button
+                  onClick={() => setSelectedCard(scorecard)}
+                  className="text-green-600 hover:text-green-800 text-sm font-medium"
+                >
+                  View Stats
+                </button>
                 <button
                   onClick={() => onDelete(scorecard.id)}
                   className="text-red-600 hover:text-red-800 text-sm font-medium"
@@ -91,44 +104,11 @@ export function ScorecardGallery({ scorecards, onDelete }: ScorecardGalleryProps
       </div>
 
       {selectedCard && (
-        <div
-          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
-          onClick={() => setSelectedCard(null)}
-        >
-          <div className="relative max-w-4xl w-full max-h-[90vh]">
-            <button
-              onClick={() => setSelectedCard(null)}
-              className="absolute -top-10 right-0 text-white hover:text-gray-300"
-            >
-              <svg
-                className="h-8 w-8"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-            <img
-              src={selectedCard.imageUrl}
-              alt="Scorecard full view"
-              className="w-full h-full object-contain"
-              onClick={(e) => e.stopPropagation()}
-            />
-            <div className="mt-4 text-center text-white">
-              <h3 className="text-xl font-semibold">
-                {selectedCard.game.teams.away.team.name} @{' '}
-                {selectedCard.game.teams.home.team.name}
-              </h3>
-              <p className="text-gray-300">{formatDate(selectedCard.game.gameDate)}</p>
-            </div>
-          </div>
-        </div>
+        <ScorecardDetail
+          scorecard={selectedCard}
+          onClose={() => setSelectedCard(null)}
+          onUpdate={onUpdate}
+        />
       )}
     </>
   );

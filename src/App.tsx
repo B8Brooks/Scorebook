@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { ImageUpload } from './components/ImageUpload';
 import { GameSelector } from './components/GameSelector';
 import { ScorecardGallery } from './components/ScorecardGallery';
-import { getScorecards, saveScorecard, deleteScorecard, generateId } from './services/storage';
+import { getScorecards, saveScorecard, deleteScorecard, updateScorecard, generateId } from './services/storage';
 import { compressImage } from './utils/imageUtils';
-import type { Game, Scorecard } from './types';
+import type { Game, Scorecard, ParsedScorecardData } from './types';
 
 type View = 'gallery' | 'upload';
 
@@ -69,6 +69,11 @@ function App() {
       deleteScorecard(id);
       setScorecards(getScorecards());
     }
+  }, []);
+
+  const handleUpdateParsedData = useCallback((id: string, parsedData: ParsedScorecardData) => {
+    updateScorecard(id, { parsedData });
+    setScorecards(getScorecards());
   }, []);
 
   const handleCancel = useCallback(() => {
@@ -143,7 +148,7 @@ function App() {
                 {scorecards.length} {scorecards.length === 1 ? 'card' : 'cards'}
               </span>
             </div>
-            <ScorecardGallery scorecards={scorecards} onDelete={handleDelete} />
+            <ScorecardGallery scorecards={scorecards} onDelete={handleDelete} onUpdate={handleUpdateParsedData} />
           </div>
         )}
 
