@@ -30,21 +30,26 @@ function App() {
   const handleSave = useCallback(() => {
     if (!uploadedImage || !selectedGame) return;
 
-    const newScorecard: Scorecard = {
-      id: generateId(),
-      imageUrl: uploadedImage,
-      game: selectedGame,
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      const newScorecard: Scorecard = {
+        id: generateId(),
+        imageUrl: uploadedImage,
+        game: selectedGame,
+        createdAt: new Date().toISOString(),
+      };
 
-    saveScorecard(newScorecard);
-    setScorecards(getScorecards());
+      saveScorecard(newScorecard);
+      setScorecards(getScorecards());
 
-    // Reset form
-    setUploadedImage(null);
-    setSelectedGame(null);
-    setStep(1);
-    setView('gallery');
+      // Reset form
+      setUploadedImage(null);
+      setSelectedGame(null);
+      setStep(1);
+      setView('gallery');
+    } catch (error) {
+      console.error('Failed to save scorecard:', error);
+      alert('Failed to save scorecard. Please try again.');
+    }
   }, [uploadedImage, selectedGame]);
 
   const handleDelete = useCallback((id: string) => {
@@ -209,9 +214,9 @@ function App() {
                     </button>
                     <button
                       onClick={handleSave}
-                      disabled={!selectedGame}
+                      disabled={!selectedGame || !uploadedImage}
                       className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                        selectedGame
+                        selectedGame && uploadedImage
                           ? 'bg-green-600 text-white hover:bg-green-700'
                           : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                       }`}

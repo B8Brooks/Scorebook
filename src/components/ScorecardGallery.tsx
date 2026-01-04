@@ -64,8 +64,8 @@ export function ScorecardGallery({ scorecards, onDelete }: ScorecardGalleryProps
             </div>
             <div className="p-4">
               <h3 className="font-semibold text-gray-900">
-                {scorecard.game.teams.away.team.teamName} @{' '}
-                {scorecard.game.teams.home.team.teamName}
+                {scorecard.game.teams.away.team.name} @{' '}
+                {scorecard.game.teams.home.team.name}
               </h3>
               <p className="text-sm text-gray-500 mt-1">
                 {formatDate(scorecard.game.gameDate)}
