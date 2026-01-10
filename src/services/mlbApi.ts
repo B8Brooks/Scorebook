@@ -257,6 +257,14 @@ const positionToNumber: Record<string, string> = {
 function parseFieldingPlay(description: string): string | null {
   const lowerDesc = description.toLowerCase();
 
+  // Pattern for errors: "reaches on a fielding error by {position}" or "error by {position}"
+  // Example: "reaches on a fielding error by third baseman DJ LeMahieu"
+  const errorMatch = lowerDesc.match(/error by\s+(pitcher|catcher|first baseman|second baseman|third baseman|shortstop|left fielder|center fielder|right fielder)/);
+  if (errorMatch) {
+    const pos = positionToNumber[errorMatch[1]];
+    if (pos) return `E${pos}`;
+  }
+
   // Pattern for groundouts with assist: "grounds out, {position} {name} to {position}"
   // Example: "grounds out, third baseman DJ LeMahieu to first baseman Ben Rice"
   const groundoutAssistMatch = lowerDesc.match(/grounds out,?\s+(pitcher|catcher|first baseman|second baseman|third baseman|shortstop|left fielder|center fielder|right fielder).*?\s+to\s+(pitcher|catcher|first baseman|second baseman|third baseman|shortstop|left fielder|center fielder|right fielder)/);
@@ -356,6 +364,7 @@ export function eventToScorecardNotation(event: string, description?: string): s
     'Grounded Into DP': 'GDP',
     'Triple Play': 'TP',
     'Field Error': 'E',
+    'Error': 'E',
     'Catcher Interference': 'CI',
     'Runner Out': 'RO',
   };
