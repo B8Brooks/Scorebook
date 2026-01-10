@@ -257,56 +257,65 @@ const positionToNumber: Record<string, string> = {
 function parseFieldingPlay(description: string): string | null {
   const lowerDesc = description.toLowerCase();
 
-  // Pattern for "grounds out, {position} to {position}"
-  const groundoutMatch = lowerDesc.match(/grounds out,?\s+(\w+\s*\w*)\s+\w+\s+to\s+(\w+\s*\w*)/);
-  if (groundoutMatch) {
-    const pos1 = positionToNumber[groundoutMatch[1].trim()];
-    const pos2 = positionToNumber[groundoutMatch[2].trim()];
+  // Pattern for groundouts with assist: "grounds out, {position} {name} to {position}"
+  // Example: "grounds out, third baseman DJ LeMahieu to first baseman Ben Rice"
+  const groundoutAssistMatch = lowerDesc.match(/grounds out,?\s+(pitcher|catcher|first baseman|second baseman|third baseman|shortstop|left fielder|center fielder|right fielder).*?\s+to\s+(pitcher|catcher|first baseman|second baseman|third baseman|shortstop|left fielder|center fielder|right fielder)/);
+  if (groundoutAssistMatch) {
+    const pos1 = positionToNumber[groundoutAssistMatch[1]];
+    const pos2 = positionToNumber[groundoutAssistMatch[2]];
     if (pos1 && pos2) return `${pos1}-${pos2}`;
   }
 
-  // Pattern for "grounds out to {position}" (unassisted)
-  const groundoutUnassistedMatch = lowerDesc.match(/grounds out to\s+(\w+\s*\w*)/);
+  // Pattern for unassisted groundouts: "grounds out to {position}"
+  const groundoutUnassistedMatch = lowerDesc.match(/grounds out to\s+(pitcher|catcher|first baseman|second baseman|third baseman|shortstop|left fielder|center fielder|right fielder)/);
   if (groundoutUnassistedMatch) {
-    const pos = positionToNumber[groundoutUnassistedMatch[1].trim()];
-    if (pos) return `G${pos}`;
+    const pos = positionToNumber[groundoutUnassistedMatch[1]];
+    if (pos) return `${pos}U`;
   }
 
-  // Pattern for "flies out to {position}"
-  const flyoutMatch = lowerDesc.match(/(?:flies|flied) out to\s+(\w+\s*\w*)/);
+  // Pattern for fly outs: "flies out to {position}" or "flied out to {position}"
+  const flyoutMatch = lowerDesc.match(/(?:flies|flied) out (?:(?:sharply|softly|deeply) )?to\s+(pitcher|catcher|first baseman|second baseman|third baseman|shortstop|left fielder|center fielder|right fielder)/);
   if (flyoutMatch) {
-    const pos = positionToNumber[flyoutMatch[1].trim()];
+    const pos = positionToNumber[flyoutMatch[1]];
     if (pos) return `F${pos}`;
   }
 
-  // Pattern for "lines out to {position}"
-  const lineoutMatch = lowerDesc.match(/(?:lines|lined) out to\s+(\w+\s*\w*)/);
+  // Pattern for line outs: "lines out to {position}"
+  const lineoutMatch = lowerDesc.match(/(?:lines|lined) out (?:(?:sharply|softly) )?to\s+(pitcher|catcher|first baseman|second baseman|third baseman|shortstop|left fielder|center fielder|right fielder)/);
   if (lineoutMatch) {
-    const pos = positionToNumber[lineoutMatch[1].trim()];
+    const pos = positionToNumber[lineoutMatch[1]];
     if (pos) return `L${pos}`;
   }
 
-  // Pattern for "pops out to {position}"
-  const popoutMatch = lowerDesc.match(/(?:pops|popped) out to\s+(\w+\s*\w*)/);
+  // Pattern for pop outs: "pops out to {position}"
+  const popoutMatch = lowerDesc.match(/(?:pops|popped) out to\s+(pitcher|catcher|first baseman|second baseman|third baseman|shortstop|left fielder|center fielder|right fielder)/);
   if (popoutMatch) {
-    const pos = positionToNumber[popoutMatch[1].trim()];
+    const pos = positionToNumber[popoutMatch[1]];
     if (pos) return `P${pos}`;
   }
 
-  // Pattern for double plays "grounds into a double play, {pos} to {pos} to {pos}"
-  const dpMatch = lowerDesc.match(/double play,?\s+(\w+\s*\w*)\s+\w+\s+to\s+(\w+\s*\w*)\s+\w+\s+to\s+(\w+\s*\w*)/);
+  // Pattern for double plays: "double play, {pos} to {pos} to {pos}"
+  const dpMatch = lowerDesc.match(/double play,?\s+(pitcher|catcher|first baseman|second baseman|third baseman|shortstop).*?\s+to\s+(pitcher|catcher|first baseman|second baseman|third baseman|shortstop).*?\s+to\s+(pitcher|catcher|first baseman|second baseman|third baseman|shortstop|left fielder|center fielder|right fielder)/);
   if (dpMatch) {
-    const pos1 = positionToNumber[dpMatch[1].trim()];
-    const pos2 = positionToNumber[dpMatch[2].trim()];
-    const pos3 = positionToNumber[dpMatch[3].trim()];
+    const pos1 = positionToNumber[dpMatch[1]];
+    const pos2 = positionToNumber[dpMatch[2]];
+    const pos3 = positionToNumber[dpMatch[3]];
     if (pos1 && pos2 && pos3) return `${pos1}-${pos2}-${pos3}`;
   }
 
-  // Pattern for sac fly "out on a sacrifice fly to {position}"
-  const sacFlyMatch = lowerDesc.match(/sacrifice fly to\s+(\w+\s*\w*)/);
+  // Pattern for sacrifice flies: "sacrifice fly to {position}"
+  const sacFlyMatch = lowerDesc.match(/sacrifice fly to\s+(pitcher|catcher|first baseman|second baseman|third baseman|shortstop|left fielder|center fielder|right fielder)/);
   if (sacFlyMatch) {
-    const pos = positionToNumber[sacFlyMatch[1].trim()];
+    const pos = positionToNumber[sacFlyMatch[1]];
     if (pos) return `SF${pos}`;
+  }
+
+  // Pattern for force outs: "out, {position} to {position}"
+  const forceoutMatch = lowerDesc.match(/out,?\s+(pitcher|catcher|first baseman|second baseman|third baseman|shortstop).*?\s+to\s+(pitcher|catcher|first baseman|second baseman|third baseman|shortstop|left fielder|center fielder|right fielder)/);
+  if (forceoutMatch) {
+    const pos1 = positionToNumber[forceoutMatch[1]];
+    const pos2 = positionToNumber[forceoutMatch[2]];
+    if (pos1 && pos2) return `${pos1}-${pos2}`;
   }
 
   return null;
