@@ -106,3 +106,32 @@ export interface ParsedScorecardData {
   rawText: string;
   confidence: number;
 }
+
+// Play-by-Play Types (Official MLB Data)
+export interface PlayEvent {
+  inning: number;
+  halfInning: 'top' | 'bottom';
+  batter: string;
+  batterId: number;
+  pitcher: string;
+  result: string;
+  resultCode: string;
+  description: string;
+  rbi: number;
+  runsScored: number;
+  outs: number;
+  isOut: boolean;
+  isHit: boolean;
+}
+
+export interface InningPlays {
+  inning: number;
+  top: PlayEvent[];
+  bottom: PlayEvent[];
+}
+
+export interface PlayByPlay {
+  innings: InningPlays[];
+  awayTeam: string;
+  homeTeam: string;
+}
