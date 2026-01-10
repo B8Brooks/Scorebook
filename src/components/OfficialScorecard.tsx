@@ -147,7 +147,7 @@ export function OfficialScorecard({ game }: OfficialScorecardProps) {
                           )}`}
                           title={play.play.description}
                         >
-                          {eventToScorecardNotation(play.play.result, play.play.resultCode)}
+                          {eventToScorecardNotation(play.play.result, play.play.description)}
                         </span>
                       )}
                     </td>
@@ -204,7 +204,7 @@ export function OfficialScorecard({ game }: OfficialScorecardProps) {
                               <span className="text-gray-600">{play.pitcher}</span>
                             </div>
                             <span className="font-bold text-lg">
-                              {eventToScorecardNotation(play.result, play.resultCode)}
+                              {eventToScorecardNotation(play.result, play.description)}
                             </span>
                           </div>
                           <p className="text-sm mt-1 opacity-80">{play.description}</p>

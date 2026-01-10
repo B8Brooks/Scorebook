@@ -239,11 +239,92 @@ export async function getPlayByPlay(gamePk: number): Promise<PlayByPlay> {
   };
 }
 
+// Position name to number mapping
+const positionToNumber: Record<string, string> = {
+  'pitcher': '1',
+  'catcher': '2',
+  'first baseman': '3',
+  'second baseman': '4',
+  'third baseman': '5',
+  'shortstop': '6',
+  'left fielder': '7',
+  'center fielder': '8',
+  'right fielder': '9',
+  'designated hitter': 'DH',
+};
+
+// Extract fielder positions from play description
+function parseFieldingPlay(description: string): string | null {
+  const lowerDesc = description.toLowerCase();
+
+  // Pattern for "grounds out, {position} to {position}"
+  const groundoutMatch = lowerDesc.match(/grounds out,?\s+(\w+\s*\w*)\s+\w+\s+to\s+(\w+\s*\w*)/);
+  if (groundoutMatch) {
+    const pos1 = positionToNumber[groundoutMatch[1].trim()];
+    const pos2 = positionToNumber[groundoutMatch[2].trim()];
+    if (pos1 && pos2) return `${pos1}-${pos2}`;
+  }
+
+  // Pattern for "grounds out to {position}" (unassisted)
+  const groundoutUnassistedMatch = lowerDesc.match(/grounds out to\s+(\w+\s*\w*)/);
+  if (groundoutUnassistedMatch) {
+    const pos = positionToNumber[groundoutUnassistedMatch[1].trim()];
+    if (pos) return `G${pos}`;
+  }
+
+  // Pattern for "flies out to {position}"
+  const flyoutMatch = lowerDesc.match(/(?:flies|flied) out to\s+(\w+\s*\w*)/);
+  if (flyoutMatch) {
+    const pos = positionToNumber[flyoutMatch[1].trim()];
+    if (pos) return `F${pos}`;
+  }
+
+  // Pattern for "lines out to {position}"
+  const lineoutMatch = lowerDesc.match(/(?:lines|lined) out to\s+(\w+\s*\w*)/);
+  if (lineoutMatch) {
+    const pos = positionToNumber[lineoutMatch[1].trim()];
+    if (pos) return `L${pos}`;
+  }
+
+  // Pattern for "pops out to {position}"
+  const popoutMatch = lowerDesc.match(/(?:pops|popped) out to\s+(\w+\s*\w*)/);
+  if (popoutMatch) {
+    const pos = positionToNumber[popoutMatch[1].trim()];
+    if (pos) return `P${pos}`;
+  }
+
+  // Pattern for double plays "grounds into a double play, {pos} to {pos} to {pos}"
+  const dpMatch = lowerDesc.match(/double play,?\s+(\w+\s*\w*)\s+\w+\s+to\s+(\w+\s*\w*)\s+\w+\s+to\s+(\w+\s*\w*)/);
+  if (dpMatch) {
+    const pos1 = positionToNumber[dpMatch[1].trim()];
+    const pos2 = positionToNumber[dpMatch[2].trim()];
+    const pos3 = positionToNumber[dpMatch[3].trim()];
+    if (pos1 && pos2 && pos3) return `${pos1}-${pos2}-${pos3}`;
+  }
+
+  // Pattern for sac fly "out on a sacrifice fly to {position}"
+  const sacFlyMatch = lowerDesc.match(/sacrifice fly to\s+(\w+\s*\w*)/);
+  if (sacFlyMatch) {
+    const pos = positionToNumber[sacFlyMatch[1].trim()];
+    if (pos) return `SF${pos}`;
+  }
+
+  return null;
+}
+
 // Convert MLB event to standard scorecard notation
-export function eventToScorecardNotation(event: string, _eventType?: string): string {
+export function eventToScorecardNotation(event: string, description?: string): string {
+  // First try to parse fielding positions from description
+  if (description) {
+    const fieldingNotation = parseFieldingPlay(description);
+    if (fieldingNotation) return fieldingNotation;
+  }
+
+  // Fallback to basic notation
   const notationMap: Record<string, string> = {
     'Strikeout': 'K',
     'Strikeout Looking': 'Ⓚ',
+    'Strikeout Swinging': 'K',
     'Walk': 'BB',
     'Intentional Walk': 'IBB',
     'Hit By Pitch': 'HBP',
@@ -257,11 +338,17 @@ export function eventToScorecardNotation(event: string, _eventType?: string): st
     'Pop Out': 'PO',
     'Forceout': 'FC',
     'Fielders Choice': 'FC',
+    'Fielders Choice Out': 'FC',
     'Sac Fly': 'SF',
     'Sac Bunt': 'SAC',
+    'Sacrifice Bunt': 'SAC',
+    'Bunt Groundout': 'SAC',
     'Double Play': 'DP',
+    'Grounded Into DP': 'GDP',
     'Triple Play': 'TP',
     'Field Error': 'E',
+    'Catcher Interference': 'CI',
+    'Runner Out': 'RO',
   };
 
   return notationMap[event] || event;
