@@ -2,9 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { ImageUpload } from './components/ImageUpload';
 import { GameSelector } from './components/GameSelector';
 import { ScorecardGallery } from './components/ScorecardGallery';
-import { getScorecards, saveScorecard, deleteScorecard, updateScorecard, generateId } from './services/storage';
+import { Settings } from './components/Settings';
+import { getScorecards, saveScorecard, deleteScorecard, updateScorecard, generateId, getGeminiApiKey } from './services/storage';
 import { compressImage } from './utils/imageUtils';
 import { detectGameInfo } from './services/ocr';
+import { analyzeScorecard } from './services/gemini';
 import type { Game, Scorecard, ParsedScorecardData } from './types';
 
 type View = 'gallery' | 'upload';
@@ -18,6 +20,7 @@ function App() {
   const [saving, setSaving] = useState(false);
   const [detectedDate, setDetectedDate] = useState<string | null>(null);
   const [scanningImage, setScanningImage] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     setScorecards(getScorecards());
@@ -29,11 +32,24 @@ function App() {
     setDetectedDate(null);
     setScanningImage(true);
 
-    // Run OCR to detect game date from scorecard
+    // Check if Gemini API key is configured
+    const geminiApiKey = getGeminiApiKey();
+
     try {
-      const gameInfo = await detectGameInfo(imageUrl);
-      if (gameInfo.date) {
-        setDetectedDate(gameInfo.date);
+      if (geminiApiKey) {
+        // Use Gemini for better OCR
+        console.log('Using Gemini for scorecard analysis...');
+        const result = await analyzeScorecard(imageUrl, geminiApiKey);
+        if (result.date) {
+          setDetectedDate(result.date);
+        }
+      } else {
+        // Fall back to Tesseract OCR
+        console.log('Using Tesseract OCR (no Gemini API key configured)...');
+        const gameInfo = await detectGameInfo(imageUrl);
+        if (gameInfo.date) {
+          setDetectedDate(gameInfo.date);
+        }
       }
     } catch (error) {
       console.error('Failed to detect game info from image:', error);
@@ -129,7 +145,7 @@ function App() {
                 <p className="text-sm text-gray-500">Your MLB scorecard collection</p>
               </div>
             </div>
-            <nav className="flex gap-2">
+            <nav className="flex gap-2 items-center">
               <button
                 onClick={() => setView('gallery')}
                 className={`px-4 py-2 rounded-lg font-medium transition-colors ${
@@ -149,6 +165,16 @@ function App() {
                 }`}
               >
                 Add New
+              </button>
+              <button
+                onClick={() => setShowSettings(true)}
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Settings"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
               </button>
             </nav>
           </div>
@@ -291,6 +317,9 @@ function App() {
           <p className="mt-1">Game data powered by MLB Stats API</p>
         </div>
       </footer>
+
+      {/* Settings Modal */}
+      <Settings isOpen={showSettings} onClose={() => setShowSettings(false)} />
     </div>
   );
 }
