@@ -37,11 +37,14 @@ export async function extractTextFromImage(
 export function extractGameDate(text: string): string | null {
   // Common date patterns in scorecards
   // Look for DATE: or Date followed by a date
+  // Be lenient with separators since OCR often misreads / as | or 1 or space
   const patterns = [
-    // MM/DD/YY or MM/DD/YYYY - most common handwritten format
-    /(?:date[:\s]*)?(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/i,
+    // MM/DD/YY with various separators (/, -, |, space, .)
+    /(?:date[:\s]*)?(\d{1,2})[\/\-\|\s\.\\](\d{1,2})[\/\-\|\s\.\\](\d{2,4})/i,
     // Written as "June 13, 2025" or "Jun 13 2025"
     /(?:date[:\s]*)?(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s*(\d{1,2})(?:st|nd|rd|th)?,?\s*['"]?(\d{2,4})/i,
+    // Looser pattern: any 3 numbers that could be a date (M D YY or MM DD YY)
+    /(\d{1,2})\s*[\/\-\|\s\.\\,]+\s*(\d{1,2})\s*[\/\-\|\s\.\\,]+\s*(\d{2,4})/,
   ];
 
   const monthMap: Record<string, number> = {
@@ -59,32 +62,42 @@ export function extractGameDate(text: string): string | null {
     'dec': 12, 'december': 12,
   };
 
+  // Also check for common OCR misreads - clean up the text first
+  const cleanedText = text
+    .replace(/[oO]/g, '0')  // O often misread as 0 in dates
+    .replace(/[lI]/g, '1')  // l and I often misread as 1
+    .replace(/[sS](?=\d)/g, '5')  // S before digit often is 5
+    .replace(/[bB](?=\d)/g, '6');  // b before digit often is 6
+
   for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match) {
-      let year: number, month: number, day: number;
+    // Try both original and cleaned text
+    for (const searchText of [text, cleanedText]) {
+      const match = searchText.match(pattern);
+      if (match) {
+        let year: number, month: number, day: number;
 
-      if (isNaN(parseInt(match[1]))) {
-        // Month name format: "June 13, 2025"
-        const monthName = match[1].toLowerCase();
-        month = monthMap[monthName] || monthMap[monthName.substring(0, 3)];
-        day = parseInt(match[2]);
-        year = parseInt(match[3]);
-      } else {
-        // Numeric format: MM/DD/YY
-        month = parseInt(match[1]);
-        day = parseInt(match[2]);
-        year = parseInt(match[3]);
-      }
+        if (isNaN(parseInt(match[1]))) {
+          // Month name format: "June 13, 2025"
+          const monthName = match[1].toLowerCase();
+          month = monthMap[monthName] || monthMap[monthName.substring(0, 3)];
+          day = parseInt(match[2]);
+          year = parseInt(match[3]);
+        } else {
+          // Numeric format: MM/DD/YY
+          month = parseInt(match[1]);
+          day = parseInt(match[2]);
+          year = parseInt(match[3]);
+        }
 
-      // Handle 2-digit years
-      if (year < 100) {
-        year = year > 50 ? 1900 + year : 2000 + year;
-      }
+        // Handle 2-digit years
+        if (year < 100) {
+          year = year > 50 ? 1900 + year : 2000 + year;
+        }
 
-      // Validate date
-      if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 2000 && year <= 2100) {
-        return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        // Validate date
+        if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 2000 && year <= 2100) {
+          return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        }
       }
     }
   }
@@ -117,8 +130,13 @@ export async function detectGameInfo(
 ): Promise<DetectedGameInfo> {
   const { text } = await extractTextFromImage(imageUrl, onProgress);
 
+  // Debug: log what OCR detected
+  console.log('OCR detected text:', text);
+
   const date = extractGameDate(text);
   const { homeTeam, awayTeam } = extractTeams(text);
+
+  console.log('Extracted date:', date, 'Home:', homeTeam, 'Away:', awayTeam);
 
   return {
     date,
