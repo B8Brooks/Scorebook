@@ -4,6 +4,7 @@ import { GameSelector } from './components/GameSelector';
 import { ScorecardGallery } from './components/ScorecardGallery';
 import { getScorecards, saveScorecard, deleteScorecard, updateScorecard, generateId } from './services/storage';
 import { compressImage } from './utils/imageUtils';
+import { detectGameInfo } from './services/ocr';
 import type { Game, Scorecard, ParsedScorecardData } from './types';
 
 type View = 'gallery' | 'upload';
@@ -15,14 +16,30 @@ function App() {
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [step, setStep] = useState<1 | 2>(1);
   const [saving, setSaving] = useState(false);
+  const [detectedDate, setDetectedDate] = useState<string | null>(null);
+  const [scanningImage, setScanningImage] = useState(false);
 
   useEffect(() => {
     setScorecards(getScorecards());
   }, []);
 
-  const handleImageSelect = useCallback((imageUrl: string) => {
+  const handleImageSelect = useCallback(async (imageUrl: string) => {
     setUploadedImage(imageUrl);
     setStep(2);
+    setDetectedDate(null);
+    setScanningImage(true);
+
+    // Run OCR to detect game date from scorecard
+    try {
+      const gameInfo = await detectGameInfo(imageUrl);
+      if (gameInfo.date) {
+        setDetectedDate(gameInfo.date);
+      }
+    } catch (error) {
+      console.error('Failed to detect game info from image:', error);
+    } finally {
+      setScanningImage(false);
+    }
   }, []);
 
   const handleGameSelect = useCallback((game: Game) => {
@@ -50,6 +67,7 @@ function App() {
       // Reset form
       setUploadedImage(null);
       setSelectedGame(null);
+      setDetectedDate(null);
       setStep(1);
       setView('gallery');
     } catch (error) {
@@ -79,6 +97,7 @@ function App() {
   const handleCancel = useCallback(() => {
     setUploadedImage(null);
     setSelectedGame(null);
+    setDetectedDate(null);
     setStep(1);
     setView('gallery');
   }, []);
@@ -217,9 +236,26 @@ function App() {
                     </div>
                   )}
 
+                  {scanningImage && (
+                    <div className="mb-4 flex items-center gap-2 text-sm text-blue-600 bg-blue-50 px-3 py-2 rounded-lg">
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
+                      Scanning scorecard for game date...
+                    </div>
+                  )}
+
+                  {detectedDate && !scanningImage && (
+                    <div className="mb-4 flex items-center gap-2 text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Detected date: {new Date(detectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  )}
+
                   <GameSelector
                     onGameSelect={handleGameSelect}
                     selectedGame={selectedGame}
+                    detectedDate={detectedDate}
                   />
 
                   <div className="mt-6 flex gap-3 justify-end">

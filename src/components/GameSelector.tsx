@@ -5,13 +5,25 @@ import { getGamesByDate, getTeams } from '../services/mlbApi';
 interface GameSelectorProps {
   onGameSelect: (game: Game) => void;
   selectedGame: Game | null;
+  detectedDate?: string | null;  // YYYY-MM-DD format from OCR
 }
 
-export function GameSelector({ onGameSelect, selectedGame }: GameSelectorProps) {
+export function GameSelector({ onGameSelect, selectedGame, detectedDate }: GameSelectorProps) {
   const [date, setDate] = useState(() => {
+    // Use detected date if provided, otherwise use today
+    if (detectedDate) {
+      return detectedDate;
+    }
     const today = new Date();
     return today.toISOString().split('T')[0];
   });
+
+  // Update date when detected date changes
+  useEffect(() => {
+    if (detectedDate) {
+      setDate(detectedDate);
+    }
+  }, [detectedDate]);
   const [games, setGames] = useState<Game[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<string>('');
