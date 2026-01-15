@@ -3,6 +3,8 @@ import type { Scorecard, ParsedScorecardData } from '../types';
 import { GameStats } from './GameStats';
 import { OfficialScorecard } from './OfficialScorecard';
 import { extractTextFromImage, parseScorecard, getResultDescription, type OCRProgress } from '../services/ocr';
+import { interpretScorecard, type InterpretedScorecard } from '../services/gemini';
+import { getGeminiApiKey } from '../services/storage';
 
 interface ScorecardDetailProps {
   scorecard: Scorecard;
@@ -17,6 +19,8 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
     scorecard.parsedData || null
   );
   const [isProcessing, setIsProcessing] = useState(false);
+  const [geminiResult, setGeminiResult] = useState<InterpretedScorecard | null>(null);
+  const [useGemini, setUseGemini] = useState(true);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -29,25 +33,45 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
 
   const handleRunOCR = async () => {
     setIsProcessing(true);
-    setOcrProgress({ status: 'initializing', progress: 0 });
+    const apiKey = getGeminiApiKey();
 
-    try {
-      const { text, confidence } = await extractTextFromImage(
-        scorecard.imageUrl,
-        setOcrProgress
-      );
+    if (useGemini && apiKey) {
+      // Use Gemini for interpretation
+      setOcrProgress({ status: 'Analyzing with Gemini AI', progress: 0.5 });
+      try {
+        const result = await interpretScorecard(scorecard.imageUrl, apiKey);
+        setGeminiResult(result);
+        setOcrProgress(null);
+      } catch (error) {
+        console.error('Gemini interpretation failed:', error);
+        alert('Gemini analysis failed. Try again or switch to basic OCR.');
+      } finally {
+        setIsProcessing(false);
+        setOcrProgress(null);
+      }
+    } else {
+      // Fall back to Tesseract OCR
+      setOcrProgress({ status: 'initializing', progress: 0 });
+      try {
+        const { text, confidence } = await extractTextFromImage(
+          scorecard.imageUrl,
+          setOcrProgress
+        );
 
-      const parsed = parseScorecard(text, confidence);
-      setOcrResult(parsed);
-      onUpdate(scorecard.id, parsed);
-    } catch (error) {
-      console.error('OCR failed:', error);
-      alert('Failed to process scorecard. Please try again.');
-    } finally {
-      setIsProcessing(false);
-      setOcrProgress(null);
+        const parsed = parseScorecard(text, confidence);
+        setOcrResult(parsed);
+        onUpdate(scorecard.id, parsed);
+      } catch (error) {
+        console.error('OCR failed:', error);
+        alert('Failed to process scorecard. Please try again.');
+      } finally {
+        setIsProcessing(false);
+        setOcrProgress(null);
+      }
     }
   };
+
+  const hasGeminiKey = !!getGeminiApiKey();
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -179,39 +203,185 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
           )}
 
           {activeTab === 'ocr' && (
-            <div className="space-y-6 max-w-3xl mx-auto">
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                <h3 className="font-semibold text-amber-900 mb-2">Experimental: OCR Analysis</h3>
-                <p className="text-amber-700 text-sm">
-                  Attempt to read text from your handwritten scorecard using OCR.
-                  Note: Handwritten scorecards are difficult to parse - use the "Official Plays" tab
-                  for accurate game data.
-                </p>
-              </div>
+            <div className="space-y-6 max-w-4xl mx-auto">
+              {hasGeminiKey ? (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-blue-900 mb-2">AI-Powered Scorecard Reader</h3>
+                  <p className="text-blue-700 text-sm">
+                    Using Gemini AI to read and interpret your handwritten scorecard.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-amber-900 mb-2">Basic OCR Analysis</h3>
+                  <p className="text-amber-700 text-sm">
+                    Add a Gemini API key in Settings for much better scorecard reading.
+                  </p>
+                </div>
+              )}
 
-              {!ocrResult && !isProcessing && (
+              {/* Analysis mode toggle */}
+              {hasGeminiKey && (
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useGemini}
+                      onChange={(e) => setUseGemini(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <span className="text-sm text-gray-700">Use Gemini AI (recommended)</span>
+                  </label>
+                </div>
+              )}
+
+              {!geminiResult && !ocrResult && !isProcessing && (
                 <button
                   onClick={handleRunOCR}
-                  className="w-full py-3 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors"
+                  className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
                 >
-                  Try OCR Analysis
+                  {hasGeminiKey && useGemini ? 'Read Scorecard with AI' : 'Try Basic OCR'}
                 </button>
               )}
 
               {isProcessing && ocrProgress && (
                 <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-600 mx-auto mb-4"></div>
-                  <p className="text-gray-600 capitalize">{ocrProgress.status}...</p>
-                  <div className="w-64 mx-auto mt-2 bg-gray-200 rounded-full h-2">
-                    <div
-                      className="bg-gray-600 h-2 rounded-full transition-all"
-                      style={{ width: `${ocrProgress.progress * 100}%` }}
-                    ></div>
-                  </div>
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-gray-600">{ocrProgress.status}...</p>
                 </div>
               )}
 
-              {ocrResult && (
+              {/* Gemini Results */}
+              {geminiResult && (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-green-600 flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Analyzed with Gemini AI
+                    </span>
+                    <button
+                      onClick={() => { setGeminiResult(null); handleRunOCR(); }}
+                      className="text-sm text-gray-600 hover:text-gray-800"
+                    >
+                      Re-analyze
+                    </button>
+                  </div>
+
+                  {/* Away Team Batters */}
+                  {geminiResult.awayBatters.length > 0 && (
+                    <div>
+                      <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <span className="w-3 h-3 bg-gray-600 rounded-full"></span>
+                        {geminiResult.awayTeam || scorecard.game.teams.away.team.name} (Away)
+                      </h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-gray-200">
+                              <th className="text-left py-2 px-3 font-medium text-gray-700">Player</th>
+                              {[1,2,3,4,5,6,7,8,9].map(i => (
+                                <th key={i} className="text-center py-2 px-2 font-medium text-gray-700 w-12">{i}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {geminiResult.awayBatters.map((batter, idx) => (
+                              <tr key={idx} className="border-b border-gray-100">
+                                <td className="py-2 px-3">
+                                  <div className="font-medium text-gray-900">{batter.name}</div>
+                                  {batter.position && (
+                                    <div className="text-xs text-gray-500">{batter.position}</div>
+                                  )}
+                                </td>
+                                {[1,2,3,4,5,6,7,8,9].map(inning => {
+                                  const atBat = batter.atBats.find(ab => ab.inning === inning);
+                                  return (
+                                    <td key={inning} className="text-center py-2 px-2">
+                                      {atBat && (
+                                        <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${
+                                          ['1B', '2B', '3B', 'HR'].includes(atBat.result) ? 'bg-green-100 text-green-800' :
+                                          ['BB', 'HBP'].includes(atBat.result) ? 'bg-blue-100 text-blue-800' :
+                                          atBat.result.startsWith('E') ? 'bg-yellow-100 text-yellow-800' :
+                                          'bg-gray-100 text-gray-700'
+                                        }`}>
+                                          {atBat.result}
+                                        </span>
+                                      )}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Home Team Batters */}
+                  {geminiResult.homeBatters.length > 0 && (
+                    <div>
+                      <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <span className="w-3 h-3 bg-green-600 rounded-full"></span>
+                        {geminiResult.homeTeam || scorecard.game.teams.home.team.name} (Home)
+                      </h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-gray-200">
+                              <th className="text-left py-2 px-3 font-medium text-gray-700">Player</th>
+                              {[1,2,3,4,5,6,7,8,9].map(i => (
+                                <th key={i} className="text-center py-2 px-2 font-medium text-gray-700 w-12">{i}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {geminiResult.homeBatters.map((batter, idx) => (
+                              <tr key={idx} className="border-b border-gray-100">
+                                <td className="py-2 px-3">
+                                  <div className="font-medium text-gray-900">{batter.name}</div>
+                                  {batter.position && (
+                                    <div className="text-xs text-gray-500">{batter.position}</div>
+                                  )}
+                                </td>
+                                {[1,2,3,4,5,6,7,8,9].map(inning => {
+                                  const atBat = batter.atBats.find(ab => ab.inning === inning);
+                                  return (
+                                    <td key={inning} className="text-center py-2 px-2">
+                                      {atBat && (
+                                        <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${
+                                          ['1B', '2B', '3B', 'HR'].includes(atBat.result) ? 'bg-green-100 text-green-800' :
+                                          ['BB', 'HBP'].includes(atBat.result) ? 'bg-blue-100 text-blue-800' :
+                                          atBat.result.startsWith('E') ? 'bg-yellow-100 text-yellow-800' :
+                                          'bg-gray-100 text-gray-700'
+                                        }`}>
+                                          {atBat.result}
+                                        </span>
+                                      )}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {geminiResult.awayBatters.length === 0 && geminiResult.homeBatters.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      <p>Could not interpret the scorecard.</p>
+                      <p className="text-sm mt-2">The handwriting may be difficult to read.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Legacy Tesseract Results */}
+              {ocrResult && !geminiResult && (
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <div>
@@ -263,9 +433,6 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
                   ) : (
                     <div className="text-center py-8 text-gray-500">
                       <p>No player data could be extracted from the scorecard.</p>
-                      <p className="text-sm mt-2">
-                        Try the "Official Plays" tab to see the actual game data.
-                      </p>
                     </div>
                   )}
 
