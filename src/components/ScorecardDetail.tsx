@@ -4,7 +4,7 @@ import { GameStats } from './GameStats';
 import { OfficialScorecard } from './OfficialScorecard';
 import { extractTextFromImage, parseScorecard, getResultDescription, type OCRProgress } from '../services/ocr';
 import { interpretScorecard, type InterpretedScorecard } from '../services/gemini';
-import { getGeminiApiKey } from '../services/storage';
+import { getGeminiApiKey, saveTrainingExample, getTrainingExamples, generateId } from '../services/storage';
 
 interface ScorecardDetailProps {
   scorecard: Scorecard;
@@ -21,6 +21,9 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
   const [isProcessing, setIsProcessing] = useState(false);
   const [geminiResult, setGeminiResult] = useState<InterpretedScorecard | null>(null);
   const [useGemini, setUseGemini] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedResult, setEditedResult] = useState<InterpretedScorecard | null>(null);
+  const [trainingCount, setTrainingCount] = useState(getTrainingExamples().length);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -72,6 +75,57 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
   };
 
   const hasGeminiKey = !!getGeminiApiKey();
+
+  const startEditing = () => {
+    if (geminiResult) {
+      setEditedResult(JSON.parse(JSON.stringify(geminiResult))); // Deep copy
+      setIsEditing(true);
+    }
+  };
+
+  const cancelEditing = () => {
+    setEditedResult(null);
+    setIsEditing(false);
+  };
+
+  const updateBatterName = (team: 'home' | 'away', batterIdx: number, newName: string) => {
+    if (!editedResult) return;
+    const batters = team === 'home' ? editedResult.homeBatters : editedResult.awayBatters;
+    batters[batterIdx].name = newName;
+    setEditedResult({ ...editedResult });
+  };
+
+  const updateAtBatResult = (team: 'home' | 'away', batterIdx: number, inning: number, newResult: string) => {
+    if (!editedResult) return;
+    const batters = team === 'home' ? editedResult.homeBatters : editedResult.awayBatters;
+    const atBat = batters[batterIdx].atBats.find(ab => ab.inning === inning);
+    if (atBat) {
+      atBat.result = newResult;
+    } else if (newResult) {
+      batters[batterIdx].atBats.push({ inning, result: newResult });
+    }
+    setEditedResult({ ...editedResult });
+  };
+
+  const saveAsTrainingExample = () => {
+    if (!editedResult) return;
+
+    const example = {
+      id: generateId(),
+      imageUrl: scorecard.imageUrl,
+      interpretation: editedResult,
+      createdAt: new Date().toISOString(),
+    };
+
+    saveTrainingExample(example);
+    setGeminiResult(editedResult);
+    setEditedResult(null);
+    setIsEditing(false);
+    setTrainingCount(getTrainingExamples().length);
+    alert('Saved as training example! Future analyses will learn from your corrections.');
+  };
+
+  const currentResult = isEditing && editedResult ? editedResult : geminiResult;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -252,29 +306,70 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
               )}
 
               {/* Gemini Results */}
-              {geminiResult && (
+              {currentResult && (
                 <div className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-green-600 flex items-center gap-2">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      Analyzed with Gemini AI
-                    </span>
-                    <button
-                      onClick={() => { setGeminiResult(null); handleRunOCR(); }}
-                      className="text-sm text-gray-600 hover:text-gray-800"
-                    >
-                      Re-analyze
-                    </button>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-medium text-green-600 flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Analyzed with Gemini AI
+                      </span>
+                      {trainingCount > 0 && (
+                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">
+                          {trainingCount} training example{trainingCount !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isEditing ? (
+                        <>
+                          <button
+                            onClick={saveAsTrainingExample}
+                            className="text-sm bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
+                          >
+                            Save as Training Example
+                          </button>
+                          <button
+                            onClick={cancelEditing}
+                            className="text-sm text-gray-600 hover:text-gray-800"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={startEditing}
+                            className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                          >
+                            Edit & Train
+                          </button>
+                          <button
+                            onClick={() => { setGeminiResult(null); handleRunOCR(); }}
+                            className="text-sm text-gray-600 hover:text-gray-800"
+                          >
+                            Re-analyze
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
 
+                  {isEditing && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+                      <strong>Edit Mode:</strong> Click on any player name or result to correct it.
+                      When done, click "Save as Training Example" to teach the AI your handwriting.
+                    </div>
+                  )}
+
                   {/* Away Team Batters */}
-                  {geminiResult.awayBatters.length > 0 && (
+                  {currentResult.awayBatters.length > 0 && (
                     <div>
                       <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                         <span className="w-3 h-3 bg-gray-600 rounded-full"></span>
-                        {geminiResult.awayTeam || scorecard.game.teams.away.team.name} (Away)
+                        {currentResult.awayTeam || scorecard.game.teams.away.team.name} (Away)
                       </h4>
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
@@ -287,10 +382,19 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
                             </tr>
                           </thead>
                           <tbody>
-                            {geminiResult.awayBatters.map((batter, idx) => (
+                            {currentResult.awayBatters.map((batter, idx) => (
                               <tr key={idx} className="border-b border-gray-100">
                                 <td className="py-2 px-3">
-                                  <div className="font-medium text-gray-900">{batter.name}</div>
+                                  {isEditing ? (
+                                    <input
+                                      type="text"
+                                      value={batter.name}
+                                      onChange={(e) => updateBatterName('away', idx, e.target.value)}
+                                      className="font-medium text-gray-900 bg-white border border-blue-300 rounded px-1 w-full"
+                                    />
+                                  ) : (
+                                    <div className="font-medium text-gray-900">{batter.name}</div>
+                                  )}
                                   {batter.position && (
                                     <div className="text-xs text-gray-500">{batter.position}</div>
                                   )}
@@ -299,7 +403,15 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
                                   const atBat = batter.atBats.find(ab => ab.inning === inning);
                                   return (
                                     <td key={inning} className="text-center py-2 px-2">
-                                      {atBat && (
+                                      {isEditing ? (
+                                        <input
+                                          type="text"
+                                          value={atBat?.result || ''}
+                                          onChange={(e) => updateAtBatResult('away', idx, inning, e.target.value)}
+                                          className="w-12 text-center text-xs border border-blue-300 rounded px-1"
+                                          placeholder="—"
+                                        />
+                                      ) : atBat ? (
                                         <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${
                                           ['1B', '2B', '3B', 'HR'].includes(atBat.result) ? 'bg-green-100 text-green-800' :
                                           ['BB', 'HBP'].includes(atBat.result) ? 'bg-blue-100 text-blue-800' :
@@ -308,7 +420,7 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
                                         }`}>
                                           {atBat.result}
                                         </span>
-                                      )}
+                                      ) : null}
                                     </td>
                                   );
                                 })}
@@ -321,11 +433,11 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
                   )}
 
                   {/* Home Team Batters */}
-                  {geminiResult.homeBatters.length > 0 && (
+                  {currentResult.homeBatters.length > 0 && (
                     <div>
                       <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                         <span className="w-3 h-3 bg-green-600 rounded-full"></span>
-                        {geminiResult.homeTeam || scorecard.game.teams.home.team.name} (Home)
+                        {currentResult.homeTeam || scorecard.game.teams.home.team.name} (Home)
                       </h4>
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
@@ -338,10 +450,19 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
                             </tr>
                           </thead>
                           <tbody>
-                            {geminiResult.homeBatters.map((batter, idx) => (
+                            {currentResult.homeBatters.map((batter, idx) => (
                               <tr key={idx} className="border-b border-gray-100">
                                 <td className="py-2 px-3">
-                                  <div className="font-medium text-gray-900">{batter.name}</div>
+                                  {isEditing ? (
+                                    <input
+                                      type="text"
+                                      value={batter.name}
+                                      onChange={(e) => updateBatterName('home', idx, e.target.value)}
+                                      className="font-medium text-gray-900 bg-white border border-blue-300 rounded px-1 w-full"
+                                    />
+                                  ) : (
+                                    <div className="font-medium text-gray-900">{batter.name}</div>
+                                  )}
                                   {batter.position && (
                                     <div className="text-xs text-gray-500">{batter.position}</div>
                                   )}
@@ -350,7 +471,15 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
                                   const atBat = batter.atBats.find(ab => ab.inning === inning);
                                   return (
                                     <td key={inning} className="text-center py-2 px-2">
-                                      {atBat && (
+                                      {isEditing ? (
+                                        <input
+                                          type="text"
+                                          value={atBat?.result || ''}
+                                          onChange={(e) => updateAtBatResult('home', idx, inning, e.target.value)}
+                                          className="w-12 text-center text-xs border border-blue-300 rounded px-1"
+                                          placeholder="—"
+                                        />
+                                      ) : atBat ? (
                                         <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${
                                           ['1B', '2B', '3B', 'HR'].includes(atBat.result) ? 'bg-green-100 text-green-800' :
                                           ['BB', 'HBP'].includes(atBat.result) ? 'bg-blue-100 text-blue-800' :
@@ -359,7 +488,7 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
                                         }`}>
                                           {atBat.result}
                                         </span>
-                                      )}
+                                      ) : null}
                                     </td>
                                   );
                                 })}
@@ -371,7 +500,7 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
                     </div>
                   )}
 
-                  {geminiResult.awayBatters.length === 0 && geminiResult.homeBatters.length === 0 && (
+                  {currentResult.awayBatters.length === 0 && currentResult.homeBatters.length === 0 && (
                     <div className="text-center py-8 text-gray-500">
                       <p>Could not interpret the scorecard.</p>
                       <p className="text-sm mt-2">The handwriting may be difficult to read.</p>

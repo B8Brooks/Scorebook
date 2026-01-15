@@ -1,5 +1,7 @@
 // Gemini API service for advanced OCR and scorecard interpretation
 
+import { getTrainingExamples, type TrainingExample } from './storage';
+
 export interface GeminiResponse {
   date: string | null;
   homeTeam: string | null;
@@ -137,14 +139,49 @@ export async function testApiKey(apiKey: string): Promise<boolean> {
   }
 }
 
+// Build few-shot examples from training data
+function buildTrainingPrompt(examples: TrainingExample[]): string {
+  if (examples.length === 0) return '';
+
+  let prompt = `\n\nIMPORTANT: Here are examples of how this user writes their scorecards. Learn from these corrections to better read their handwriting:\n\n`;
+
+  examples.forEach((example, idx) => {
+    prompt += `EXAMPLE ${idx + 1} - Correct interpretation:\n`;
+    prompt += JSON.stringify({
+      homeTeam: example.interpretation.homeTeam,
+      awayTeam: example.interpretation.awayTeam,
+      homeBatters: example.interpretation.homeBatters.map(b => ({
+        name: b.name,
+        position: b.position,
+        atBats: b.atBats.slice(0, 3) // Limit to first 3 at-bats to save tokens
+      })),
+      awayBatters: example.interpretation.awayBatters.map(b => ({
+        name: b.name,
+        position: b.position,
+        atBats: b.atBats.slice(0, 3)
+      }))
+    }, null, 2);
+    prompt += '\n\n';
+  });
+
+  prompt += `Use these examples to understand this user's handwriting patterns. Names and notation style should be similar.\n`;
+
+  return prompt;
+}
+
 // Full scorecard interpretation
 export async function interpretScorecard(
   imageBase64: string,
-  apiKey: string
+  apiKey: string,
+  includeTraining: boolean = true
 ): Promise<InterpretedScorecard> {
   const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
 
-  const prompt = `You are an expert at reading handwritten baseball scorecards. Analyze this scorecard image and extract all the information.
+  // Get training examples for few-shot learning
+  const trainingExamples = includeTraining ? getTrainingExamples() : [];
+  const trainingPrompt = buildTrainingPrompt(trainingExamples);
+
+  const prompt = `You are an expert at reading handwritten baseball scorecards. Analyze this scorecard image and extract all the information.${trainingPrompt}
 
 This is a standard baseball scorecard with:
 - Player names listed vertically on the left
@@ -212,6 +249,38 @@ Important:
 - Convert handwritten notation to standard format
 - The away team usually bats first (top of page), home team second (bottom of page)`;
 
+  // Build parts array with training example images first (for visual few-shot learning)
+  const parts: Array<{ text: string } | { inline_data: { mime_type: string; data: string } }> = [];
+
+  // Add training example images if available (limit to 2 for API limits)
+  if (trainingExamples.length > 0) {
+    parts.push({ text: 'Here are example scorecards from this user with their correct interpretations:\n' });
+
+    trainingExamples.slice(0, 2).forEach((example, idx) => {
+      const exampleData = example.imageUrl.replace(/^data:image\/\w+;base64,/, '');
+      parts.push({
+        inline_data: {
+          mime_type: 'image/jpeg',
+          data: exampleData,
+        },
+      });
+      parts.push({
+        text: `Example ${idx + 1} correct reading: ${example.interpretation.homeBatters.slice(0, 3).map(b => b.name).join(', ')} (home); ${example.interpretation.awayBatters.slice(0, 3).map(b => b.name).join(', ')} (away)\n`
+      });
+    });
+
+    parts.push({ text: '\n---\nNow analyze this NEW scorecard:\n' });
+  }
+
+  // Add the main prompt and current image
+  parts.push({ text: prompt });
+  parts.push({
+    inline_data: {
+      mime_type: 'image/jpeg',
+      data: base64Data,
+    },
+  });
+
   const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
     method: 'POST',
     headers: {
@@ -220,15 +289,7 @@ Important:
     body: JSON.stringify({
       contents: [
         {
-          parts: [
-            { text: prompt },
-            {
-              inline_data: {
-                mime_type: 'image/jpeg',
-                data: base64Data,
-              },
-            },
-          ],
+          parts: parts,
         },
       ],
       generationConfig: {

@@ -1,10 +1,19 @@
 import type { Scorecard } from '../types';
+import type { InterpretedScorecard } from './gemini';
 
 const STORAGE_KEY = 'mlb-scorecards';
 const SETTINGS_KEY = 'mlb-scorebook-settings';
+const TRAINING_EXAMPLES_KEY = 'mlb-scorecard-training';
 
 export interface AppSettings {
   geminiApiKey?: string;
+}
+
+export interface TrainingExample {
+  id: string;
+  imageUrl: string;  // Base64 image
+  interpretation: InterpretedScorecard;
+  createdAt: string;
 }
 
 export function getScorecards(): Scorecard[] {
@@ -69,4 +78,35 @@ export function saveGeminiApiKey(apiKey: string): void {
   const settings = getSettings();
   settings.geminiApiKey = apiKey;
   saveSettings(settings);
+}
+
+// Training examples functions
+export function getTrainingExamples(): TrainingExample[] {
+  const data = localStorage.getItem(TRAINING_EXAMPLES_KEY);
+  if (!data) return [];
+
+  try {
+    return JSON.parse(data);
+  } catch {
+    return [];
+  }
+}
+
+export function saveTrainingExample(example: TrainingExample): void {
+  const examples = getTrainingExamples();
+  // Keep only the 3 most recent examples (to save space and keep prompt size reasonable)
+  const MAX_EXAMPLES = 3;
+  examples.unshift(example);
+  const trimmed = examples.slice(0, MAX_EXAMPLES);
+  localStorage.setItem(TRAINING_EXAMPLES_KEY, JSON.stringify(trimmed));
+}
+
+export function deleteTrainingExample(id: string): void {
+  const examples = getTrainingExamples();
+  const filtered = examples.filter(e => e.id !== id);
+  localStorage.setItem(TRAINING_EXAMPLES_KEY, JSON.stringify(filtered));
+}
+
+export function clearTrainingExamples(): void {
+  localStorage.removeItem(TRAINING_EXAMPLES_KEY);
 }
