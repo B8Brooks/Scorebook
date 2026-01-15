@@ -30,7 +30,7 @@ export interface InterpretedScorecard {
   rawResponse?: string;
 }
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 export async function analyzeScorecard(
   imageBase64: string,
@@ -129,7 +129,7 @@ If you can't find a field, use null.`;
 export async function testApiKey(apiKey: string): Promise<boolean> {
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash?key=${apiKey}`
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash?key=${apiKey}`
     );
     return response.ok;
   } catch {
