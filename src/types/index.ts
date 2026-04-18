@@ -135,3 +135,78 @@ export interface PlayByPlay {
   awayTeam: string;
   homeTeam: string;
 }
+
+// Pitcher Scouting Types
+export interface PitchArsenalItem {
+  pitchType: string;
+  pitchName: string;
+  usagePct: number;
+  avgVelo?: number;
+  avgSpin?: number;
+}
+
+export interface HandednessSplit {
+  vs: 'RHB' | 'LHB';
+  avg: string;
+  obp: string;
+  slg: string;
+  ops: string;
+  pa: number;
+  so: number;
+  bb: number;
+  hr: number;
+}
+
+export interface PitcherSeasonStats {
+  w: number;
+  l: number;
+  era: string;
+  gamesPlayed: number;
+  gamesStarted: number;
+  saves: number;
+  holds: number;
+  ip: string;
+  so: number;
+  bb: number;
+  whip: string;
+  k9?: string;
+}
+
+export interface PitcherBio {
+  id: number;
+  fullName: string;
+  pitchHand: 'L' | 'R' | 'S';
+  age?: number;
+  currentTeam?: string;
+  primaryNumber?: string;
+}
+
+export interface PitcherScoutingReport {
+  bio: PitcherBio;
+  seasonUsed: number;
+  season: PitcherSeasonStats | null;
+  vsRHB: HandednessSplit | null;
+  vsLHB: HandednessSplit | null;
+  arsenal: PitchArsenalItem[];
+}
+
+export interface ProbablePitcherSide {
+  teamId: number;
+  teamName: string;
+  probablePitcherId?: number;
+  probablePitcherName?: string;
+}
+
+export interface ProbablePitcherInfo {
+  gamePk: number;
+  gameDate: string;
+  venue?: string;
+  home: ProbablePitcherSide;
+  away: ProbablePitcherSide;
+}
+
+export interface RelieverRanking {
+  id: number;
+  name: string;
+  score: number;
+}

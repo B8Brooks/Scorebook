@@ -3,13 +3,14 @@ import { ImageUpload } from './components/ImageUpload';
 import { GameSelector } from './components/GameSelector';
 import { ScorecardGallery } from './components/ScorecardGallery';
 import { Settings } from './components/Settings';
+import { Scouting } from './components/Scouting';
 import { getScorecards, saveScorecard, deleteScorecard, updateScorecard, generateId, getGeminiApiKey } from './services/storage';
 import { compressImage } from './utils/imageUtils';
 import { detectGameInfo } from './services/ocr';
 import { analyzeScorecard } from './services/gemini';
 import type { Game, Scorecard, ParsedScorecardData } from './types';
 
-type View = 'gallery' | 'upload';
+type View = 'gallery' | 'upload' | 'scout';
 
 function App() {
   const [view, setView] = useState<View>('gallery');
@@ -121,7 +122,7 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
+      <header className="bg-white shadow-sm border-b border-gray-200 no-print">
         <div className="max-w-6xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -167,6 +168,16 @@ function App() {
                 Add New
               </button>
               <button
+                onClick={() => setView('scout')}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  view === 'scout'
+                    ? 'bg-green-600 text-white'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                Scout
+              </button>
+              <button
                 onClick={() => setShowSettings(true)}
                 className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                 title="Settings"
@@ -183,6 +194,8 @@ function App() {
 
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 py-8">
+        {view === 'scout' && <Scouting />}
+
         {view === 'gallery' && (
           <div>
             <div className="flex items-center justify-between mb-6">
