@@ -582,12 +582,15 @@ function parseArsenal(splits: any[]): PitchArsenalItem[] {
   return splits
     .map(s => {
       const stat = s?.stat ?? {};
-      const pt = stat.pitchType ?? {};
-      const usage = parseFloatSafe(stat.percentOccurrence ?? stat.percent);
+      const pt = stat.type ?? stat.pitchType ?? {};
+      const rawUsage = parseFloatSafe(
+        stat.percentage ?? stat.percentOccurrence ?? stat.percent
+      );
+      const usagePct = rawUsage > 1 ? rawUsage : rawUsage * 100;
       return {
         pitchType: pt.code ?? pt.abbreviation ?? '??',
         pitchName: pt.description ?? pt.displayName ?? 'Unknown',
-        usagePct: usage > 1 ? usage : usage * 100, // handle 0.35 vs 35
+        usagePct,
         avgVelo: stat.averageSpeed != null ? parseFloatSafe(stat.averageSpeed) : undefined,
         avgSpin: stat.averageSpinRate != null ? parseFloatSafe(stat.averageSpinRate) : undefined,
       };
@@ -626,22 +629,12 @@ async function fetchSplits(
 }
 
 async function fetchArsenal(personId: number, season: number): Promise<PitchArsenalItem[]> {
-  const url = `${MLB_API_BASE}/people/${personId}/stats?stats=pitchArsenal&group=pitching&season=${season}`;
-  const res = await fetch(url);
-  // eslint-disable-next-line no-console
-  console.log('[arsenal]', personId, season, 'status:', res.status);
-  if (!res.ok) {
-    // eslint-disable-next-line no-console
-    console.warn('[arsenal] non-ok response, url:', url);
-    return [];
-  }
+  const res = await fetch(
+    `${MLB_API_BASE}/people/${personId}/stats?stats=pitchArsenal&group=pitching&season=${season}`
+  );
+  if (!res.ok) return [];
   const data = await res.json();
-  // eslint-disable-next-line no-console
-  console.log('[arsenal]', personId, season, 'raw:', JSON.stringify(data).slice(0, 600));
-  const parsed = parseArsenal(data?.stats?.[0]?.splits ?? []);
-  // eslint-disable-next-line no-console
-  console.log('[arsenal]', personId, season, 'parsed count:', parsed.length);
-  return parsed;
+  return parseArsenal(data?.stats?.[0]?.splits ?? []);
 }
 
 async function fetchPersonWithSeason(personId: number, season: number) {
