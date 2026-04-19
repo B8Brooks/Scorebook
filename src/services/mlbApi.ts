@@ -570,7 +570,7 @@ function parseSplit(split: any, vs: 'RHB' | 'LHB'): HandednessSplit | null {
     obp: String(stat.obp ?? '.000'),
     slg: String(stat.slg ?? '.000'),
     ops: String(stat.ops ?? '.000'),
-    pa: stat.plateAppearances ?? 0,
+    pa: stat.plateAppearances ?? stat.battersFaced ?? stat.atBats ?? 0,
     so: stat.strikeOuts ?? 0,
     bb: stat.baseOnBalls ?? 0,
     hr: stat.homeRuns ?? 0,
@@ -680,6 +680,13 @@ export async function getPitcherScoutingReport(
       vsLHB = prevSplits.vsLHB;
       arsenal = prevArsenal;
       seasonUsed = prev;
+    }
+  } else if (arsenal.length === 0) {
+    // Arsenal is often empty early in the season even when IP is healthy.
+    // Fall back to previous season's arsenal only (keep current-season splits/stats).
+    const prevArsenal = await fetchArsenal(personId, season - 1);
+    if (prevArsenal.length > 0) {
+      arsenal = prevArsenal;
     }
   }
 
