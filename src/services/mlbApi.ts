@@ -626,12 +626,22 @@ async function fetchSplits(
 }
 
 async function fetchArsenal(personId: number, season: number): Promise<PitchArsenalItem[]> {
-  const res = await fetch(
-    `${MLB_API_BASE}/people/${personId}/stats?stats=pitchArsenal&group=pitching&season=${season}`
-  );
-  if (!res.ok) return [];
+  const url = `${MLB_API_BASE}/people/${personId}/stats?stats=pitchArsenal&group=pitching&season=${season}`;
+  const res = await fetch(url);
+  // eslint-disable-next-line no-console
+  console.log('[arsenal]', personId, season, 'status:', res.status);
+  if (!res.ok) {
+    // eslint-disable-next-line no-console
+    console.warn('[arsenal] non-ok response, url:', url);
+    return [];
+  }
   const data = await res.json();
-  return parseArsenal(data?.stats?.[0]?.splits ?? []);
+  // eslint-disable-next-line no-console
+  console.log('[arsenal]', personId, season, 'raw:', JSON.stringify(data).slice(0, 600));
+  const parsed = parseArsenal(data?.stats?.[0]?.splits ?? []);
+  // eslint-disable-next-line no-console
+  console.log('[arsenal]', personId, season, 'parsed count:', parsed.length);
+  return parsed;
 }
 
 async function fetchPersonWithSeason(personId: number, season: number) {
