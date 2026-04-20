@@ -167,16 +167,34 @@ export function PitcherCard({ report, role, label, mode = 'full', currentSeason 
         )}
       </div>
 
-      <div className={compact ? 'mt-2' : 'mt-3'}>
-        <SplitsTable vsRHB={vsRHB} vsLHB={vsLHB} compact={compact} />
-      </div>
-
-      <div className={compact ? 'mt-2' : 'mt-3'}>
-        <div className={`${compact ? 'text-[10px]' : 'text-xs'} font-semibold text-gray-600 uppercase tracking-wide mb-1`}>
-          Arsenal
+      {role === 'Starter' ? (
+        <div className={`${compact ? 'mt-2' : 'mt-3'} grid grid-cols-1 sm:grid-cols-2 gap-3`}>
+          <div>
+            <div className={`${compact ? 'text-[10px]' : 'text-xs'} font-semibold text-gray-600 uppercase tracking-wide mb-1`}>
+              Splits
+            </div>
+            <SplitsTable vsRHB={vsRHB} vsLHB={vsLHB} compact={compact} />
+          </div>
+          <div>
+            <div className={`${compact ? 'text-[10px]' : 'text-xs'} font-semibold text-gray-600 uppercase tracking-wide mb-1`}>
+              Arsenal
+            </div>
+            <PitchArsenalBar arsenal={arsenal} compact={compact} />
+          </div>
         </div>
-        <PitchArsenalBar arsenal={arsenal} compact={compact} />
-      </div>
+      ) : (
+        <>
+          <div className={compact ? 'mt-2' : 'mt-3'}>
+            <SplitsTable vsRHB={vsRHB} vsLHB={vsLHB} compact={compact} />
+          </div>
+          <div className={compact ? 'mt-2' : 'mt-3'}>
+            <div className={`${compact ? 'text-[10px]' : 'text-xs'} font-semibold text-gray-600 uppercase tracking-wide mb-1`}>
+              Arsenal
+            </div>
+            <PitchArsenalBar arsenal={arsenal} compact={compact} />
+          </div>
+        </>
+      )}
     </div>
   );
 }
