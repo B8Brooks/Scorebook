@@ -197,6 +197,7 @@ export interface TeamLineup {
   teamName: string;
   posted: boolean;
   battingOrder: BatterLineupEntry[];
+  bench: BatterLineupEntry[];
 }
 
 export interface PitcherBio {

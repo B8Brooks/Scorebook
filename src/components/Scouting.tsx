@@ -14,6 +14,7 @@ import {
   getGameLineups,
   getBatterInfo,
   getLeagueHittingAverage,
+  getTeamBench,
 } from '../services/mlbApi';
 import { PitcherCard, type PitcherCardMode } from './PitcherCard';
 import { LineupSection } from './LineupSection';
@@ -156,7 +157,22 @@ export function Scouting() {
                 }
               })
             );
-            return { ...base, battingOrder: enriched };
+            const starterIds = enriched.map(e => e.id);
+            let bench: BatterLineupEntry[] = [];
+            try {
+              const rawBench = await getTeamBench(base.teamId, currentSeason, starterIds);
+              bench = rawBench.map(b => {
+                const ops = parseFloat(String(b.ops ?? '0'));
+                const opsPlus =
+                  leagueAvg.ops > 0 && Number.isFinite(ops) && ops > 0
+                    ? Math.round((100 * ops) / leagueAvg.ops)
+                    : undefined;
+                return { ...b, opsPlus };
+              });
+            } catch {
+              bench = [];
+            }
+            return { ...base, battingOrder: enriched, bench };
           };
 
           const homeEnriched = await enrich(lineups.home);

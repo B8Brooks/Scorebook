@@ -757,10 +757,61 @@ export async function getGameLineups(gamePk: number): Promise<{ home: TeamLineup
       teamName: gameSide.name ?? '',
       posted: battingOrder.length > 0,
       battingOrder,
+      bench: [],
     };
   };
 
   return { home: buildSide('home'), away: buildSide('away') };
+}
+
+export async function getTeamBench(
+  teamId: number,
+  season: number,
+  starterIds: number[]
+): Promise<BatterLineupEntry[]> {
+  const res = await fetch(
+    `${MLB_API_BASE}/teams/${teamId}/roster?rosterType=active&hydrate=person(stats(group=[hitting],type=[season],season=${season}))`
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  const roster = data?.roster ?? [];
+  const starterSet = new Set(starterIds);
+
+  const bench: BatterLineupEntry[] = [];
+  for (const entry of roster) {
+    const person = entry.person ?? {};
+    if (!person.id || starterSet.has(person.id)) continue;
+    const positionCode = entry.position?.code ?? person.primaryPosition?.code;
+    if (positionCode === '1') continue; // skip pitchers
+
+    const statsBlock = (person.stats ?? []).find(
+      (s: any) => s?.group?.displayName === 'hitting' && s?.type?.displayName === 'season'
+    );
+    const stat = statsBlock?.splits?.[0]?.stat ?? null;
+
+    const batCode = person.batSide?.code;
+    const batSide: 'L' | 'R' | 'S' =
+      batCode === 'L' || batCode === 'R' || batCode === 'S' ? batCode : 'R';
+
+    bench.push({
+      orderIndex: 0,
+      id: person.id,
+      fullName: person.fullName ?? 'Unknown',
+      primaryNumber: person.primaryNumber ?? entry.jerseyNumber,
+      position: entry.position?.abbreviation ?? person.primaryPosition?.abbreviation ?? '',
+      batSide,
+      avg: String(stat?.avg ?? '.000'),
+      obp: String(stat?.obp ?? '.000'),
+      slg: String(stat?.slg ?? '.000'),
+      ops: String(stat?.ops ?? '.000'),
+      pa: stat?.plateAppearances ?? 0,
+      hr: stat?.homeRuns ?? 0,
+    });
+  }
+
+  // Most-used bench pieces first.
+  bench.sort((a, b) => b.pa - a.pa);
+  return bench;
 }
 
 export async function getBatterInfo(

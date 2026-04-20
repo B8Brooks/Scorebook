@@ -60,15 +60,66 @@ export function LineupSection({ lineup, mode, opposingStarterHand }: LineupSecti
   const padX = compact ? 'px-1' : 'px-2';
 
   return (
-    <div className={`bg-white rounded-xl border border-gray-200 overflow-x-auto ${compact ? '' : 'shadow-sm'}`}>
+    <div className="flex flex-wrap items-start gap-3">
+      <div className={`bg-white rounded-xl border border-gray-200 overflow-x-auto ${compact ? '' : 'shadow-sm'}`}>
+        <table className={`${textSize} border-collapse w-auto`}>
+          <thead className="bg-gray-50 text-gray-600 uppercase tracking-wide">
+            <tr>
+              <th className={`text-center ${padX} ${padY}`}>#</th>
+              <th className={`text-left ${padX} ${padY}`}>Batter</th>
+              <th className={`text-center ${padX} ${padY}`}>Pos</th>
+              <th className={`text-center ${padX} ${padY}`}>B</th>
+              <th className={`text-right ${padX} ${padY}`}>AVG/OBP/SLG</th>
+              <th className={`text-center ${padX} ${padY}`}>OPS</th>
+              <th className={`text-center ${padX} ${padY}`}>OPS+</th>
+              <th className={`text-right ${padX} ${padY}`}>PA</th>
+              <th className={`text-right ${padX} ${padY}`}>HR</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {lineup.battingOrder.map(batter => (
+              <BatterRow
+                key={batter.id}
+                batter={batter}
+                padX={padX}
+                padY={padY}
+                hasPlatoonAdvantage={platoonAdvantage(batter.batSide, opposingStarterHand)}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {lineup.bench.length > 0 && (
+        <BenchPanel bench={lineup.bench} textSize={textSize} padX={padX} padY={padY} compact={compact} />
+      )}
+    </div>
+  );
+}
+
+function BenchPanel({
+  bench,
+  textSize,
+  padX,
+  padY,
+  compact,
+}: {
+  bench: BatterLineupEntry[];
+  textSize: string;
+  padX: string;
+  padY: string;
+  compact: boolean;
+}) {
+  return (
+    <div className={`bg-white rounded-xl border border-gray-200 overflow-x-auto flex-1 min-w-[240px] ${compact ? '' : 'shadow-sm'}`}>
+      <div className={`${textSize} font-semibold text-gray-500 uppercase tracking-wide ${padX} pt-1.5`}>
+        Bench
+      </div>
       <table className={`${textSize} border-collapse w-auto`}>
-        <thead className="bg-gray-50 text-gray-600 uppercase tracking-wide">
+        <thead className="text-gray-600 uppercase tracking-wide">
           <tr>
-            <th className={`text-center ${padX} ${padY}`}>#</th>
             <th className={`text-left ${padX} ${padY}`}>Batter</th>
             <th className={`text-center ${padX} ${padY}`}>Pos</th>
             <th className={`text-center ${padX} ${padY}`}>B</th>
-            <th className={`text-right ${padX} ${padY}`}>AVG/OBP/SLG</th>
             <th className={`text-center ${padX} ${padY}`}>OPS</th>
             <th className={`text-center ${padX} ${padY}`}>OPS+</th>
             <th className={`text-right ${padX} ${padY}`}>PA</th>
@@ -76,14 +127,39 @@ export function LineupSection({ lineup, mode, opposingStarterHand }: LineupSecti
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {lineup.battingOrder.map(batter => (
-            <BatterRow
-              key={batter.id}
-              batter={batter}
-              padX={padX}
-              padY={padY}
-              hasPlatoonAdvantage={platoonAdvantage(batter.batSide, opposingStarterHand)}
-            />
+          {bench.map(b => (
+            <tr key={b.id}>
+              <td className={`${padX} ${padY}`}>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-gray-900 truncate">{b.fullName}</span>
+                  {b.primaryNumber && (
+                    <span className="text-gray-400 text-[10px]">#{b.primaryNumber}</span>
+                  )}
+                </div>
+              </td>
+              <td className={`text-center text-gray-600 ${padX} ${padY}`}>
+                {b.position || '—'}
+              </td>
+              <td className={`text-center ${padX} ${padY}`}>
+                <BatSideChip side={b.batSide} />
+              </td>
+              <td className={`text-center ${padX} ${padY}`}>
+                <span className={`inline-block px-1.5 py-0.5 rounded tabular-nums ${opsClass(b.ops)}`}>
+                  {b.ops}
+                </span>
+              </td>
+              <td className={`text-center ${padX} ${padY}`}>
+                <span className={`inline-block px-1.5 py-0.5 rounded tabular-nums ${opsPlusClass(b.opsPlus)}`}>
+                  {b.opsPlus ?? '—'}
+                </span>
+              </td>
+              <td className={`text-right tabular-nums text-gray-700 ${padX} ${padY}`}>
+                {b.pa}
+              </td>
+              <td className={`text-right tabular-nums text-gray-700 ${padX} ${padY}`}>
+                {b.hr}
+              </td>
+            </tr>
           ))}
         </tbody>
       </table>
