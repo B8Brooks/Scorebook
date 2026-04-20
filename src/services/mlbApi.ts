@@ -508,7 +508,7 @@ export async function getTeamRelievers(
   });
 
   ranked.sort((a, b) => b.score - a.score);
-  return ranked.slice(0, 5);
+  return ranked.slice(0, 4);
 }
 
 function parseBio(person: any): PitcherBio {

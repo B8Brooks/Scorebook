@@ -44,23 +44,28 @@ function SeasonStrip({
   role: 'Starter' | 'Reliever';
   compact: boolean;
 }) {
-  const cells: Array<{ label: string; value: string | number }> = [
-    { label: 'W-L', value: `${season.w}-${season.l}` },
-    { label: 'ERA', value: season.era },
-    { label: 'IP', value: season.ip },
-    { label: 'K', value: season.so },
-    { label: 'BB', value: season.bb },
-    { label: 'WHIP', value: season.whip },
-    { label: 'K/9', value: season.k9 ?? '—' },
-  ];
-  if (role === 'Reliever') {
-    cells.push({ label: 'SV/HLD', value: `${season.saves}/${season.holds}` });
-  } else {
-    cells.push({ label: 'GS', value: season.gamesStarted });
-  }
+  // Keep the strip to 6 cells so it doesn't crowd inside narrow bullpen cards.
+  const cells: Array<{ label: string; value: string | number }> =
+    role === 'Reliever'
+      ? [
+          { label: 'ERA', value: season.era },
+          { label: 'IP', value: season.ip },
+          { label: 'WHIP', value: season.whip },
+          { label: 'K/9', value: season.k9 ?? '—' },
+          { label: 'SV', value: season.saves },
+          { label: 'HLD', value: season.holds },
+        ]
+      : [
+          { label: 'W-L', value: `${season.w}-${season.l}` },
+          { label: 'ERA', value: season.era },
+          { label: 'IP', value: season.ip },
+          { label: 'WHIP', value: season.whip },
+          { label: 'K/9', value: season.k9 ?? '—' },
+          { label: 'GS', value: season.gamesStarted },
+        ];
 
   return (
-    <div className={`grid ${compact ? 'grid-cols-8 gap-0.5 py-1' : 'grid-cols-4 sm:grid-cols-8 gap-1 py-2'} border-y border-gray-200 bg-gray-50 rounded`}>
+    <div className={`grid grid-cols-6 ${compact ? 'gap-0.5 py-1' : 'gap-1 py-2'} border-y border-gray-200 bg-gray-50 rounded`}>
       {cells.map(c => (
         <StatCell key={c.label} {...c} />
       ))}
