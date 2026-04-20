@@ -464,7 +464,6 @@ export async function getTeamRelievers(
     k9: number;
     saves: number;
     holds: number;
-    aLI?: number;
     gs: number;
     gp: number;
   }> = [];
@@ -491,33 +490,20 @@ export async function getTeamRelievers(
       k9: parseFloatSafe(stat.strikeoutsPer9Inn ?? stat.strikeOutsPer9Inn),
       saves: stat.saves ?? 0,
       holds: stat.holds ?? 0,
-      aLI:
-        stat.avgLeverageIndex != null
-          ? parseFloatSafe(stat.avgLeverageIndex)
-          : undefined,
-    gs,
-    gp,
+      gs,
+      gp,
     });
   }
 
-  const anyALI = candidates.some(c => c.aLI != null);
-
+  // Saves dominate (closer signal); holds identify setup men;
+  // K/9 and ERA are tiebreakers within a role tier.
   const ranked = candidates.map(c => {
-    const eraTerm = (5.0 - c.era) * 10; // higher is better
-    let score: number;
-    if (anyALI) {
-      score =
-        c.k9 * 0.4 +
-        eraTerm * 0.3 +
-        (c.aLI ?? 1) * 10 * 0.2 +
-        (c.saves * 1.5 + c.holds) * 0.1;
-    } else {
-      score =
-        c.k9 * 0.5 +
-        eraTerm * 0.4 +
-        (c.saves * 1.5 + c.holds) * 0.1;
-    }
-    if (c.ip < 5) score *= 0.5;
+    let score =
+      c.saves * 5 +
+      c.holds * 1.5 +
+      c.k9 * 0.4 +
+      (5.0 - c.era) * 0.3;
+    if (c.ip < 5) score *= 0.5; // small-sample penalty
     return { id: c.id, name: c.name, score };
   });
 
