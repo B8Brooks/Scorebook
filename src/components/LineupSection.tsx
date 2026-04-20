@@ -71,7 +71,6 @@ export function LineupSection({ lineup, mode, opposingStarterHand }: LineupSecti
             <th className={`text-right ${padX} ${padY}`}>AVG/OBP/SLG</th>
             <th className={`text-center ${padX} ${padY} w-12`}>OPS</th>
             <th className={`text-center ${padX} ${padY} w-10`}>OPS+</th>
-            <th className={`text-right ${padX} ${padY} w-10`}>wOBA</th>
             <th className={`text-right ${padX} ${padY} w-8`}>HR</th>
           </tr>
         </thead>
@@ -138,9 +137,6 @@ function BatterRow({
         <span className={`inline-block px-1.5 py-0.5 rounded tabular-nums ${smallSample ? 'text-gray-400' : opsPlusClass(batter.opsPlus)}`}>
           {batter.opsPlus ?? '—'}
         </span>
-      </td>
-      <td className={`text-right tabular-nums text-gray-700 ${padX} ${padY}`}>
-        {batter.wOBA ?? '—'}
       </td>
       <td className={`text-right tabular-nums text-gray-700 ${padX} ${padY}`}>
         {batter.hr}

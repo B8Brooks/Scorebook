@@ -187,7 +187,6 @@ export interface BatterLineupEntry {
   obp: string;
   slg: string;
   ops: string;
-  wOBA?: string;
   opsPlus?: number;
   pa: number;
   hr: number;

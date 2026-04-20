@@ -767,14 +767,9 @@ export async function getBatterInfo(
   personId: number,
   season: number
 ): Promise<Partial<BatterLineupEntry> & { id: number }> {
-  const [personRes, saberRes] = await Promise.all([
-    fetch(
-      `${MLB_API_BASE}/people/${personId}?hydrate=stats(group=[hitting],type=[season],season=${season})`
-    ),
-    fetch(
-      `${MLB_API_BASE}/people/${personId}/stats?stats=sabermetrics&group=hitting&season=${season}`
-    ),
-  ]);
+  const personRes = await fetch(
+    `${MLB_API_BASE}/people/${personId}?hydrate=stats(group=[hitting],type=[season],season=${season})`
+  );
 
   let stat: any = null;
   let person: any = null;
@@ -785,15 +780,6 @@ export async function getBatterInfo(
       (s: any) => s?.group?.displayName === 'hitting' && s?.type?.displayName === 'season'
     );
     stat = statsBlock?.splits?.[0]?.stat ?? null;
-  }
-
-  let wOBA: string | undefined;
-  if (saberRes.ok) {
-    const saberData = await saberRes.json();
-    const saberStat = saberData?.stats?.[0]?.splits?.[0]?.stat;
-    if (saberStat?.woba != null) wOBA = String(saberStat.woba);
-    else if (saberStat?.wOba != null) wOBA = String(saberStat.wOba);
-    else if (saberStat?.wOBA != null) wOBA = String(saberStat.wOBA);
   }
 
   const batCode = person?.batSide?.code;
@@ -812,7 +798,6 @@ export async function getBatterInfo(
     ops: String(stat?.ops ?? '.000'),
     pa: stat?.plateAppearances ?? 0,
     hr: stat?.homeRuns ?? 0,
-    wOBA,
   };
 }
 

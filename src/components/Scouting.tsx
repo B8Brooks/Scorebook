@@ -147,7 +147,6 @@ export function Scouting() {
                     obp: batter.obp ?? b.obp,
                     slg: batter.slg ?? b.slg,
                     ops: batter.ops ?? b.ops,
-                    wOBA: batter.wOBA,
                     pa: batter.pa ?? b.pa,
                     hr: batter.hr ?? b.hr,
                     opsPlus,
