@@ -187,7 +187,10 @@ export function PitcherCard({ report, role, label, mode = 'full', currentSeason 
         {season ? (
           <>
             <SeasonStrip season={season} role={role} compact={compact} />
-            <RateStatsRow season={season} compact={compact} />
+            {/* Skip the rate stats row for relievers in print to save vertical space. */}
+            {(role === 'Starter' || !compact) && (
+              <RateStatsRow season={season} compact={compact} />
+            )}
           </>
         ) : (
           <div className="text-xs italic text-gray-500 py-2">No season stats available</div>
@@ -214,12 +217,15 @@ export function PitcherCard({ report, role, label, mode = 'full', currentSeason 
           <div className={compact ? 'mt-2' : 'mt-3'}>
             <SplitsTable vsRHB={vsRHB} vsLHB={vsLHB} compact={compact} />
           </div>
-          <div className={compact ? 'mt-2' : 'mt-3'}>
-            <div className={`${compact ? 'text-[10px]' : 'text-xs'} font-semibold text-gray-600 uppercase tracking-wide mb-1`}>
-              Arsenal
+          {/* Drop the arsenal pie from reliever cards in print to keep one team per page. */}
+          {!compact && (
+            <div className="mt-3">
+              <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                Arsenal
+              </div>
+              <PitchArsenalBar arsenal={arsenal} compact={compact} />
             </div>
-            <PitchArsenalBar arsenal={arsenal} compact={compact} />
-          </div>
+          )}
         </>
       )}
     </div>
