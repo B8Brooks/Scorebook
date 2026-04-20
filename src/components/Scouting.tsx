@@ -3,14 +3,20 @@ import type {
   Team,
   ProbablePitcherInfo,
   PitcherScoutingReport,
+  TeamLineup,
+  BatterLineupEntry,
 } from '../types';
 import {
   getTeams,
   getProbablePitchers,
   getTeamRelievers,
   getPitcherScoutingReport,
+  getGameLineups,
+  getBatterInfo,
+  getLeagueHittingAverage,
 } from '../services/mlbApi';
 import { PitcherCard, type PitcherCardMode } from './PitcherCard';
+import { LineupSection } from './LineupSection';
 
 const RED_SOX_ID = 111;
 
@@ -42,6 +48,8 @@ export function Scouting() {
   const [selectedBullpen, setSelectedBullpen] = useState<PitcherScoutingReport[]>([]);
   const [opponentName, setOpponentName] = useState<string>('');
   const [selectedName, setSelectedName] = useState<string>('');
+  const [opponentLineup, setOpponentLineup] = useState<TeamLineup | null>(null);
+  const [selectedLineup, setSelectedLineup] = useState<TeamLineup | null>(null);
 
   const currentSeason = useMemo(() => new Date(date + 'T12:00:00').getFullYear(), [date]);
 
@@ -64,6 +72,8 @@ export function Scouting() {
     setSelectedBullpen([]);
     setOpponentName('');
     setSelectedName('');
+    setOpponentLineup(null);
+    setSelectedLineup(null);
 
     try {
       const info = await getProbablePitchers(date, teamId);
@@ -108,6 +118,59 @@ export function Scouting() {
 
       tasks.push(loadBullpen(opponentSide.teamId, setOpponentBullpen));
       tasks.push(loadBullpen(selectedSide.teamId, setSelectedBullpen));
+
+      // Lineups + league-average OPS run in parallel with the pitcher fetches.
+      const lineupsTask = (async () => {
+        try {
+          const [lineups, leagueAvg] = await Promise.all([
+            getGameLineups(info.gamePk),
+            getLeagueHittingAverage(currentSeason),
+          ]);
+          const enrich = async (base: TeamLineup): Promise<TeamLineup> => {
+            if (!base.posted || base.battingOrder.length === 0) return base;
+            const enriched = await Promise.all(
+              base.battingOrder.map(async (b): Promise<BatterLineupEntry> => {
+                try {
+                  const batter = await getBatterInfo(b.id, currentSeason);
+                  const ops = parseFloat(String(batter.ops ?? '0'));
+                  const opsPlus =
+                    leagueAvg.ops > 0 && Number.isFinite(ops) && ops > 0
+                      ? Math.round((100 * ops) / leagueAvg.ops)
+                      : undefined;
+                  return {
+                    ...b,
+                    fullName: batter.fullName ?? b.fullName,
+                    primaryNumber: batter.primaryNumber ?? b.primaryNumber,
+                    position: b.position || batter.position || '',
+                    batSide: batter.batSide ?? b.batSide,
+                    avg: batter.avg ?? b.avg,
+                    obp: batter.obp ?? b.obp,
+                    slg: batter.slg ?? b.slg,
+                    ops: batter.ops ?? b.ops,
+                    wOBA: batter.wOBA,
+                    pa: batter.pa ?? b.pa,
+                    hr: batter.hr ?? b.hr,
+                    opsPlus,
+                  };
+                } catch {
+                  return b;
+                }
+              })
+            );
+            return { ...base, battingOrder: enriched };
+          };
+
+          const homeEnriched = await enrich(lineups.home);
+          const awayEnriched = await enrich(lineups.away);
+          const oppIsHome = opponentSide.teamId === info.home.teamId;
+          setOpponentLineup(oppIsHome ? homeEnriched : awayEnriched);
+          setSelectedLineup(oppIsHome ? awayEnriched : homeEnriched);
+        } catch {
+          setOpponentLineup(null);
+          setSelectedLineup(null);
+        }
+      })();
+      tasks.push(lineupsTask);
 
       await Promise.all(tasks);
     } catch (err) {
@@ -234,6 +297,11 @@ export function Scouting() {
             starterSide={probable!.home.teamId === teamId ? 'away' : 'home'}
             bullpen={opponentBullpen}
             isFirstPage
+            lineup={opponentLineup}
+            // Opponent batters face the selected team's starter (Red Sox SP).
+            opposingStarterHand={
+              (probable!.home.teamId === teamId ? homeStarter : awayStarter)?.bio.pitchHand
+            }
           />
 
           {/* Page 2: Selected team (back) */}
@@ -251,6 +319,11 @@ export function Scouting() {
             starterSide={probable!.home.teamId === teamId ? 'home' : 'away'}
             bullpen={selectedBullpen}
             isFirstPage={false}
+            lineup={selectedLineup}
+            // Red Sox batters face the opposing starter.
+            opposingStarterHand={
+              (probable!.home.teamId === teamId ? awayStarter : homeStarter)?.bio.pitchHand
+            }
           />
         </div>
       )}
@@ -270,6 +343,8 @@ interface TeamPageProps {
   starterSide: 'home' | 'away';
   bullpen: PitcherScoutingReport[];
   isFirstPage: boolean;
+  lineup: TeamLineup | null;
+  opposingStarterHand?: 'L' | 'R' | 'S';
 }
 
 function TeamPage({
@@ -284,6 +359,8 @@ function TeamPage({
   starterSide,
   bullpen,
   isFirstPage,
+  lineup,
+  opposingStarterHand,
 }: TeamPageProps) {
   const teamName = team === 'opponent' ? opponentName : selectedName;
   const sectionLabel = team === 'opponent' ? 'Opponent' : 'Your Team';
@@ -360,6 +437,20 @@ function TeamPage({
           </div>
         )}
       </div>
+
+      {/* Lineup */}
+      {lineup && (
+        <div>
+          <h3 className={`font-bold text-gray-900 mb-2 ${mode === 'print' ? 'text-xs' : 'text-lg'}`}>
+            Lineup — {teamName}
+          </h3>
+          <LineupSection
+            lineup={lineup}
+            mode={mode}
+            opposingStarterHand={opposingStarterHand}
+          />
+        </div>
+      )}
     </section>
   );
 }

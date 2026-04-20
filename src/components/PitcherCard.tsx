@@ -73,6 +73,30 @@ function SeasonStrip({
   );
 }
 
+function RateStatsRow({
+  season,
+  compact,
+}: {
+  season: NonNullable<PitcherScoutingReport['season']>;
+  compact: boolean;
+}) {
+  const cells: Array<{ label: string; value: string | number }> = [];
+  if (season.kPct != null) cells.push({ label: 'K%', value: `${season.kPct}%` });
+  if (season.bbPct != null) cells.push({ label: 'BB%', value: `${season.bbPct}%` });
+  if (season.hr9 != null) cells.push({ label: 'HR/9', value: season.hr9.toFixed(2) });
+  if (season.goAoRatio) cells.push({ label: 'GO/AO', value: season.goAoRatio });
+
+  if (cells.length === 0) return null;
+
+  return (
+    <div className={`grid grid-cols-4 ${compact ? 'gap-0.5 py-0.5 mt-0.5' : 'gap-1 py-1 mt-1'} border-b border-gray-200`}>
+      {cells.map(c => (
+        <StatCell key={c.label} {...c} />
+      ))}
+    </div>
+  );
+}
+
 function TextView({ report, role, currentSeason }: { report: PitcherScoutingReport; role: 'Starter' | 'Reliever'; currentSeason: number }) {
   const { bio, season, vsRHB, vsLHB, arsenal, seasonUsed } = report;
   return (
@@ -161,7 +185,10 @@ export function PitcherCard({ report, role, label, mode = 'full', currentSeason 
 
       <div className={compact ? 'mt-2' : 'mt-3'}>
         {season ? (
-          <SeasonStrip season={season} role={role} compact={compact} />
+          <>
+            <SeasonStrip season={season} role={role} compact={compact} />
+            <RateStatsRow season={season} compact={compact} />
+          </>
         ) : (
           <div className="text-xs italic text-gray-500 py-2">No season stats available</div>
         )}

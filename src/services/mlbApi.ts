@@ -16,6 +16,8 @@ import type {
   PitcherSeasonStats,
   PitcherBio,
   RelieverRanking,
+  BatterLineupEntry,
+  TeamLineup,
 } from '../types';
 
 const MLB_API_BASE = 'https://statsapi.mlb.com/api/v1';
@@ -544,7 +546,30 @@ function parseSeasonStats(stat: any): PitcherSeasonStats | null {
       : stat.strikeOutsPer9Inn != null
         ? String(stat.strikeOutsPer9Inn)
         : undefined,
+    kPct: computePct(stat.strikeOuts, stat.battersFaced ?? stat.plateAppearances),
+    bbPct: computePct(stat.baseOnBalls, stat.battersFaced ?? stat.plateAppearances),
+    hr9: computeHr9(stat.homeRuns, stat.inningsPitched),
+    goAoRatio:
+      stat.groundOutsToAirouts != null
+        ? String(stat.groundOutsToAirouts)
+        : stat.groundOutsToAirOuts != null
+          ? String(stat.groundOutsToAirOuts)
+          : undefined,
   };
+}
+
+function computePct(num: unknown, denom: unknown): number | undefined {
+  const n = typeof num === 'number' ? num : parseFloat(String(num ?? ''));
+  const d = typeof denom === 'number' ? denom : parseFloat(String(denom ?? ''));
+  if (!Number.isFinite(n) || !Number.isFinite(d) || d <= 0) return undefined;
+  return Math.round((n / d) * 1000) / 10; // one decimal
+}
+
+function computeHr9(hrRaw: unknown, ipRaw: unknown): number | undefined {
+  const hr = typeof hrRaw === 'number' ? hrRaw : parseFloat(String(hrRaw ?? ''));
+  const ip = parseIp(ipRaw);
+  if (!Number.isFinite(hr) || ip <= 0) return undefined;
+  return Math.round((hr * 9 / ip) * 100) / 100;
 }
 
 function parseSplit(split: any, vs: 'RHB' | 'LHB'): HandednessSplit | null {
@@ -687,4 +712,125 @@ export async function getPitcherScoutingReport(
     vsLHB,
     arsenal,
   };
+}
+
+// ---------- Lineups & Batter Info ----------
+
+export async function getGameLineups(gamePk: number): Promise<{ home: TeamLineup; away: TeamLineup }> {
+  const res = await fetch(`${MLB_API_V11}/game/${gamePk}/feed/live`);
+  if (!res.ok) throw new Error('Failed to fetch game feed');
+  const data = await res.json();
+  const gameData = data?.gameData ?? {};
+  const boxscore = data?.liveData?.boxscore ?? {};
+
+  const buildSide = (sideKey: 'home' | 'away'): TeamLineup => {
+    const boxSide = boxscore.teams?.[sideKey] ?? {};
+    const gameSide = gameData.teams?.[sideKey] ?? {};
+    const orderIds: number[] = boxSide.battingOrder ?? boxSide.batters ?? [];
+    const players = boxSide.players ?? {};
+    // Only take the first 9 — active substitutions extend the array late in the game.
+    const order = orderIds.slice(0, 9);
+    const battingOrder: BatterLineupEntry[] = order.map((id, idx) => {
+      const player = players[`ID${id}`] ?? {};
+      const person = player.person ?? {};
+      const position = player.position?.abbreviation ?? person.primaryPosition?.abbreviation ?? '';
+      const batCode = person.batSide?.code;
+      const batSide: 'L' | 'R' | 'S' =
+        batCode === 'L' || batCode === 'R' || batCode === 'S' ? batCode : 'R';
+      return {
+        orderIndex: idx + 1,
+        id,
+        fullName: person.fullName ?? 'Unknown',
+        primaryNumber: player.jerseyNumber ?? person.primaryNumber,
+        position,
+        batSide,
+        avg: '.000',
+        obp: '.000',
+        slg: '.000',
+        ops: '.000',
+        pa: 0,
+        hr: 0,
+      };
+    });
+    return {
+      teamId: gameSide.id ?? 0,
+      teamName: gameSide.name ?? '',
+      posted: battingOrder.length > 0,
+      battingOrder,
+    };
+  };
+
+  return { home: buildSide('home'), away: buildSide('away') };
+}
+
+export async function getBatterInfo(
+  personId: number,
+  season: number
+): Promise<Partial<BatterLineupEntry> & { id: number }> {
+  const [personRes, saberRes] = await Promise.all([
+    fetch(
+      `${MLB_API_BASE}/people/${personId}?hydrate=stats(group=[hitting],type=[season],season=${season})`
+    ),
+    fetch(
+      `${MLB_API_BASE}/people/${personId}/stats?stats=sabermetrics&group=hitting&season=${season}`
+    ),
+  ]);
+
+  let stat: any = null;
+  let person: any = null;
+  if (personRes.ok) {
+    const data = await personRes.json();
+    person = data?.people?.[0] ?? null;
+    const statsBlock = (person?.stats ?? []).find(
+      (s: any) => s?.group?.displayName === 'hitting' && s?.type?.displayName === 'season'
+    );
+    stat = statsBlock?.splits?.[0]?.stat ?? null;
+  }
+
+  let wOBA: string | undefined;
+  if (saberRes.ok) {
+    const saberData = await saberRes.json();
+    const saberStat = saberData?.stats?.[0]?.splits?.[0]?.stat;
+    if (saberStat?.woba != null) wOBA = String(saberStat.woba);
+    else if (saberStat?.wOba != null) wOBA = String(saberStat.wOba);
+    else if (saberStat?.wOBA != null) wOBA = String(saberStat.wOBA);
+  }
+
+  const batCode = person?.batSide?.code;
+  const batSide: 'L' | 'R' | 'S' =
+    batCode === 'L' || batCode === 'R' || batCode === 'S' ? batCode : 'R';
+
+  return {
+    id: personId,
+    fullName: person?.fullName ?? 'Unknown',
+    primaryNumber: person?.primaryNumber,
+    position: person?.primaryPosition?.abbreviation ?? '',
+    batSide,
+    avg: String(stat?.avg ?? '.000'),
+    obp: String(stat?.obp ?? '.000'),
+    slg: String(stat?.slg ?? '.000'),
+    ops: String(stat?.ops ?? '.000'),
+    pa: stat?.plateAppearances ?? 0,
+    hr: stat?.homeRuns ?? 0,
+    wOBA,
+  };
+}
+
+const leagueOpsCache = new Map<number, Promise<{ ops: number }>>();
+
+export function getLeagueHittingAverage(season: number): Promise<{ ops: number }> {
+  const cached = leagueOpsCache.get(season);
+  if (cached) return cached;
+  const promise = (async () => {
+    const res = await fetch(
+      `${MLB_API_BASE}/stats?stats=season&group=hitting&sportIds=1&season=${season}&gameType=R`
+    );
+    if (!res.ok) return { ops: 0.720 }; // reasonable fallback
+    const data = await res.json();
+    const stat = data?.stats?.[0]?.splits?.[0]?.stat;
+    const ops = parseFloat(String(stat?.ops ?? '0.720'));
+    return { ops: Number.isFinite(ops) && ops > 0 ? ops : 0.720 };
+  })();
+  leagueOpsCache.set(season, promise);
+  return promise;
 }

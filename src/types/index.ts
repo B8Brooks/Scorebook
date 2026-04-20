@@ -170,6 +170,34 @@ export interface PitcherSeasonStats {
   bb: number;
   whip: string;
   k9?: string;
+  kPct?: number;
+  bbPct?: number;
+  hr9?: number;
+  goAoRatio?: string;
+}
+
+export interface BatterLineupEntry {
+  orderIndex: number;
+  id: number;
+  fullName: string;
+  primaryNumber?: string;
+  position: string;
+  batSide: 'L' | 'R' | 'S';
+  avg: string;
+  obp: string;
+  slg: string;
+  ops: string;
+  wOBA?: string;
+  opsPlus?: number;
+  pa: number;
+  hr: number;
+}
+
+export interface TeamLineup {
+  teamId: number;
+  teamName: string;
+  posted: boolean;
+  battingOrder: BatterLineupEntry[];
 }
 
 export interface PitcherBio {
