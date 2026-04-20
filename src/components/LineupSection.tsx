@@ -71,6 +71,7 @@ export function LineupSection({ lineup, mode, opposingStarterHand }: LineupSecti
             <th className={`text-right ${padX} ${padY}`}>AVG/OBP/SLG</th>
             <th className={`text-center ${padX} ${padY} w-12`}>OPS</th>
             <th className={`text-center ${padX} ${padY} w-10`}>OPS+</th>
+            <th className={`text-right ${padX} ${padY} w-10`}>PA</th>
             <th className={`text-right ${padX} ${padY} w-8`}>HR</th>
           </tr>
         </thead>
@@ -101,7 +102,6 @@ function BatterRow({
   padY: string;
   hasPlatoonAdvantage: boolean;
 }) {
-  const smallSample = batter.pa < 15;
   return (
     <tr className={hasPlatoonAdvantage ? 'bg-blue-50/50' : ''}>
       <td className={`text-center font-bold text-gray-600 ${padX} ${padY}`}>
@@ -122,21 +122,20 @@ function BatterRow({
         <BatSideChip side={batter.batSide} />
       </td>
       <td className={`text-right tabular-nums text-gray-700 ${padX} ${padY}`}>
-        {smallSample ? (
-          <span className="text-gray-400 italic">small sample</span>
-        ) : (
-          `${batter.avg} / ${batter.obp} / ${batter.slg}`
-        )}
+        {batter.avg} / {batter.obp} / {batter.slg}
       </td>
       <td className={`text-center ${padX} ${padY}`}>
-        <span className={`inline-block px-1.5 py-0.5 rounded tabular-nums ${smallSample ? 'text-gray-400' : opsClass(batter.ops)}`}>
+        <span className={`inline-block px-1.5 py-0.5 rounded tabular-nums ${opsClass(batter.ops)}`}>
           {batter.ops}
         </span>
       </td>
       <td className={`text-center ${padX} ${padY}`}>
-        <span className={`inline-block px-1.5 py-0.5 rounded tabular-nums ${smallSample ? 'text-gray-400' : opsPlusClass(batter.opsPlus)}`}>
+        <span className={`inline-block px-1.5 py-0.5 rounded tabular-nums ${opsPlusClass(batter.opsPlus)}`}>
           {batter.opsPlus ?? '—'}
         </span>
+      </td>
+      <td className={`text-right tabular-nums text-gray-700 ${padX} ${padY}`}>
+        {batter.pa}
       </td>
       <td className={`text-right tabular-nums text-gray-700 ${padX} ${padY}`}>
         {batter.hr}
