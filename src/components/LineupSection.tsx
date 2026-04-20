@@ -60,19 +60,19 @@ export function LineupSection({ lineup, mode, opposingStarterHand }: LineupSecti
   const padX = compact ? 'px-1' : 'px-2';
 
   return (
-    <div className={`bg-white rounded-xl border border-gray-200 overflow-hidden ${compact ? '' : 'shadow-sm'}`}>
-      <table className={`w-full ${textSize} border-collapse`}>
+    <div className={`bg-white rounded-xl border border-gray-200 overflow-x-auto ${compact ? '' : 'shadow-sm'}`}>
+      <table className={`${textSize} border-collapse w-auto`}>
         <thead className="bg-gray-50 text-gray-600 uppercase tracking-wide">
           <tr>
-            <th className={`text-center ${padX} ${padY} w-6`}>#</th>
+            <th className={`text-center ${padX} ${padY}`}>#</th>
             <th className={`text-left ${padX} ${padY}`}>Batter</th>
-            <th className={`text-center ${padX} ${padY} w-10`}>Pos</th>
-            <th className={`text-center ${padX} ${padY} w-6`}>B</th>
+            <th className={`text-center ${padX} ${padY}`}>Pos</th>
+            <th className={`text-center ${padX} ${padY}`}>B</th>
             <th className={`text-right ${padX} ${padY}`}>AVG/OBP/SLG</th>
-            <th className={`text-center ${padX} ${padY} w-12`}>OPS</th>
-            <th className={`text-center ${padX} ${padY} w-10`}>OPS+</th>
-            <th className={`text-right ${padX} ${padY} w-10`}>PA</th>
-            <th className={`text-right ${padX} ${padY} w-8`}>HR</th>
+            <th className={`text-center ${padX} ${padY}`}>OPS</th>
+            <th className={`text-center ${padX} ${padY}`}>OPS+</th>
+            <th className={`text-right ${padX} ${padY}`}>PA</th>
+            <th className={`text-right ${padX} ${padY}`}>HR</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
