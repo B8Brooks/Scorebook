@@ -26,6 +26,10 @@ body {
   .scouting-report {
     gap: 0.5rem;
   }
+  .scouting-page-break {
+    break-before: page;
+    page-break-before: always;
+  }
   .pitcher-card {
     break-inside: avoid;
     page-break-inside: avoid;

@@ -38,8 +38,10 @@ export function Scouting() {
   const [probable, setProbable] = useState<ProbablePitcherInfo | null>(null);
   const [homeStarter, setHomeStarter] = useState<PitcherScoutingReport | null>(null);
   const [awayStarter, setAwayStarter] = useState<PitcherScoutingReport | null>(null);
-  const [bullpen, setBullpen] = useState<PitcherScoutingReport[]>([]);
+  const [opponentBullpen, setOpponentBullpen] = useState<PitcherScoutingReport[]>([]);
+  const [selectedBullpen, setSelectedBullpen] = useState<PitcherScoutingReport[]>([]);
   const [opponentName, setOpponentName] = useState<string>('');
+  const [selectedName, setSelectedName] = useState<string>('');
 
   const currentSeason = useMemo(() => new Date(date + 'T12:00:00').getFullYear(), [date]);
 
@@ -58,8 +60,10 @@ export function Scouting() {
     setProbable(null);
     setHomeStarter(null);
     setAwayStarter(null);
-    setBullpen([]);
+    setOpponentBullpen([]);
+    setSelectedBullpen([]);
     setOpponentName('');
+    setSelectedName('');
 
     try {
       const info = await getProbablePitchers(date, teamId);
@@ -69,7 +73,9 @@ export function Scouting() {
       }
       setProbable(info);
 
+      const selectedSide = info.home.teamId === teamId ? info.home : info.away;
       const opponentSide = info.home.teamId === teamId ? info.away : info.home;
+      setSelectedName(selectedSide.teamName);
       setOpponentName(opponentSide.teamName);
 
       const tasks: Array<Promise<void>> = [];
@@ -85,15 +91,23 @@ export function Scouting() {
         );
       }
 
-      const bullpenTask = getTeamRelievers(opponentSide.teamId, currentSeason)
-        .then(async rankings => {
+      const loadBullpen = async (
+        targetTeamId: number,
+        setter: (reports: PitcherScoutingReport[]) => void
+      ) => {
+        try {
+          const rankings = await getTeamRelievers(targetTeamId, currentSeason);
           const reports = await Promise.all(
             rankings.map(r => getPitcherScoutingReport(r.id, currentSeason))
           );
-          setBullpen(reports);
-        })
-        .catch(() => setBullpen([]));
-      tasks.push(bullpenTask);
+          setter(reports);
+        } catch {
+          setter([]);
+        }
+      };
+
+      tasks.push(loadBullpen(opponentSide.teamId, setOpponentBullpen));
+      tasks.push(loadBullpen(selectedSide.teamId, setSelectedBullpen));
 
       await Promise.all(tasks);
     } catch (err) {
@@ -118,7 +132,7 @@ export function Scouting() {
       <div className="no-print bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h2 className="text-xl font-bold text-gray-900 mb-1">Pitcher Scouting Report</h2>
         <p className="text-sm text-gray-500 mb-4">
-          Pull probable starters and the opposing bullpen from the MLB Stats API.
+          Probable starters and top relievers for both teams. Print to a double-sided sheet — opponent on the front, your team on the back.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
@@ -204,83 +218,149 @@ export function Scouting() {
 
       {/* Report */}
       {hasReport && (
-        <div className={`scouting-report ${mode === 'print' ? 'print-page space-y-3' : 'space-y-6'}`}>
-          {/* Matchup header */}
-          <div className={`bg-white rounded-xl border border-gray-200 ${mode === 'print' ? 'p-3' : 'p-5 shadow-sm'}`}>
-            <div className="flex items-baseline justify-between gap-2 flex-wrap">
-              <div>
-                <div className={`${mode === 'print' ? 'text-sm' : 'text-base'} text-gray-500 uppercase tracking-wide font-semibold`}>
-                  Scouting Report
-                </div>
-                <div className={`${mode === 'print' ? 'text-lg' : 'text-2xl'} font-bold text-gray-900`}>
-                  {matchupHeader}
-                </div>
-              </div>
-              <div className={`text-right ${mode === 'print' ? 'text-xs' : 'text-sm'} text-gray-600`}>
-                <div>{probable && formatDate(probable.gameDate.slice(0, 10))}</div>
-                {probable?.venue && <div className="text-gray-500">{probable.venue}</div>}
-              </div>
-            </div>
-          </div>
+        <div className={`scouting-report ${mode === 'print' ? 'space-y-3' : 'space-y-6'}`}>
+          {/* Page 1: Opponent (front) */}
+          <TeamPage
+            team="opponent"
+            mode={mode}
+            matchupHeader={matchupHeader}
+            probable={probable!}
+            opponentName={opponentName}
+            selectedName={selectedName}
+            currentSeason={currentSeason}
+            starter={
+              probable!.home.teamId === teamId ? awayStarter : homeStarter
+            }
+            starterSide={probable!.home.teamId === teamId ? 'away' : 'home'}
+            bullpen={opponentBullpen}
+            isFirstPage
+          />
 
-          {/* Starters */}
-          <div>
-            <h3 className={`font-bold text-gray-900 mb-2 ${mode === 'print' ? 'text-sm' : 'text-lg'}`}>
-              Probable Starters
-            </h3>
-            <div className={`grid gap-3 ${mode === 'print' ? 'grid-cols-2' : 'grid-cols-1 lg:grid-cols-2'}`}>
-              {awayStarter ? (
-                <PitcherCard
-                  report={awayStarter}
-                  role="Starter"
-                  label={`Away Starter — ${probable!.away.teamName}`}
-                  mode={mode}
-                  currentSeason={currentSeason}
-                />
-              ) : (
-                <TBACard label={`Away Starter — ${probable!.away.teamName}`} mode={mode} name={probable!.away.probablePitcherName} />
-              )}
-              {homeStarter ? (
-                <PitcherCard
-                  report={homeStarter}
-                  role="Starter"
-                  label={`Home Starter — ${probable!.home.teamName}`}
-                  mode={mode}
-                  currentSeason={currentSeason}
-                />
-              ) : (
-                <TBACard label={`Home Starter — ${probable!.home.teamName}`} mode={mode} name={probable!.home.probablePitcherName} />
-              )}
-            </div>
-          </div>
-
-          {/* Bullpen */}
-          <div>
-            <h3 className={`font-bold text-gray-900 mb-2 ${mode === 'print' ? 'text-sm' : 'text-lg'}`}>
-              Opposing Bullpen — {opponentName} (Top 3)
-            </h3>
-            {bullpen.length === 0 ? (
-              <div className="text-sm italic text-gray-500 bg-white rounded-xl border border-gray-200 p-4">
-                No reliever data available for this opponent.
-              </div>
-            ) : (
-              <div className={`grid gap-3 ${mode === 'print' ? 'grid-cols-3' : 'grid-cols-1 lg:grid-cols-3'}`}>
-                {bullpen.map((r, i) => (
-                  <PitcherCard
-                    key={r.bio.id}
-                    report={r}
-                    role="Reliever"
-                    label={i === 0 ? 'Likely Closer' : `Reliever #${i + 1}`}
-                    mode={mode}
-                    currentSeason={currentSeason}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Page 2: Selected team (back) */}
+          <TeamPage
+            team="selected"
+            mode={mode}
+            matchupHeader={matchupHeader}
+            probable={probable!}
+            opponentName={opponentName}
+            selectedName={selectedName}
+            currentSeason={currentSeason}
+            starter={
+              probable!.home.teamId === teamId ? homeStarter : awayStarter
+            }
+            starterSide={probable!.home.teamId === teamId ? 'home' : 'away'}
+            bullpen={selectedBullpen}
+            isFirstPage={false}
+          />
         </div>
       )}
     </div>
+  );
+}
+
+interface TeamPageProps {
+  team: 'opponent' | 'selected';
+  mode: PitcherCardMode;
+  matchupHeader: string;
+  probable: ProbablePitcherInfo;
+  opponentName: string;
+  selectedName: string;
+  currentSeason: number;
+  starter: PitcherScoutingReport | null;
+  starterSide: 'home' | 'away';
+  bullpen: PitcherScoutingReport[];
+  isFirstPage: boolean;
+}
+
+function TeamPage({
+  team,
+  mode,
+  matchupHeader,
+  probable,
+  opponentName,
+  selectedName,
+  currentSeason,
+  starter,
+  starterSide,
+  bullpen,
+  isFirstPage,
+}: TeamPageProps) {
+  const teamName = team === 'opponent' ? opponentName : selectedName;
+  const sectionLabel = team === 'opponent' ? 'Opponent' : 'Your Team';
+  const probableSide = starterSide === 'home' ? probable.home : probable.away;
+  const probableName = probableSide.probablePitcherName;
+  // Print: page 2 gets a hard page break before it.
+  const pageBreakClass =
+    mode === 'print' && !isFirstPage ? 'scouting-page-break' : '';
+
+  return (
+    <section className={`scouting-page space-y-3 ${pageBreakClass}`}>
+      {/* Team header */}
+      <div className={`bg-white rounded-xl border border-gray-200 ${mode === 'print' ? 'p-3' : 'p-5 shadow-sm'}`}>
+        <div className="flex items-baseline justify-between gap-2 flex-wrap">
+          <div>
+            <div className={`${mode === 'print' ? 'text-[10px]' : 'text-xs'} text-gray-500 uppercase tracking-wide font-semibold`}>
+              {sectionLabel} — Pitching
+            </div>
+            <div className={`${mode === 'print' ? 'text-lg' : 'text-2xl'} font-bold text-gray-900`}>
+              {teamName}
+            </div>
+          </div>
+          <div className={`text-right ${mode === 'print' ? 'text-[10px]' : 'text-sm'} text-gray-600`}>
+            <div className="font-semibold">{matchupHeader}</div>
+            <div>{formatDate(probable.gameDate.slice(0, 10))}</div>
+            {probable.venue && <div className="text-gray-500">{probable.venue}</div>}
+          </div>
+        </div>
+      </div>
+
+      {/* Starter — full width, large */}
+      <div>
+        <h3 className={`font-bold text-gray-900 mb-2 ${mode === 'print' ? 'text-xs' : 'text-lg'}`}>
+          Probable Starter
+        </h3>
+        {starter ? (
+          <PitcherCard
+            report={starter}
+            role="Starter"
+            label={`${starterSide === 'home' ? 'Home' : 'Away'} Starter — ${teamName}`}
+            mode={mode}
+            currentSeason={currentSeason}
+          />
+        ) : (
+          <TBACard
+            label={`${starterSide === 'home' ? 'Home' : 'Away'} Starter — ${teamName}`}
+            mode={mode}
+            name={probableName}
+          />
+        )}
+      </div>
+
+      {/* Bullpen */}
+      <div>
+        <h3 className={`font-bold text-gray-900 mb-2 ${mode === 'print' ? 'text-xs' : 'text-lg'}`}>
+          Bullpen — Top 3
+        </h3>
+        {bullpen.length === 0 ? (
+          <div className="text-sm italic text-gray-500 bg-white rounded-xl border border-gray-200 p-4">
+            No reliever data available.
+          </div>
+        ) : (
+          <div className={`grid gap-3 ${mode === 'print' ? 'grid-cols-3' : 'grid-cols-1 lg:grid-cols-3'}`}>
+            {bullpen.map((r, i) => (
+              <PitcherCard
+                key={r.bio.id}
+                report={r}
+                role="Reliever"
+                label={i === 0 ? 'Likely Closer' : `Reliever #${i + 1}`}
+                mode={mode}
+                currentSeason={currentSeason}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
