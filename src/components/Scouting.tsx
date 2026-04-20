@@ -386,19 +386,19 @@ function TeamPage({
     mode === 'print' && !isFirstPage ? 'scouting-page-break' : '';
 
   return (
-    <section className={`scouting-page ${mode === 'print' ? 'space-y-2' : 'space-y-3'} ${pageBreakClass}`}>
+    <section className={`scouting-page space-y-3 ${pageBreakClass}`}>
       {/* Team header */}
-      <div className={`bg-white rounded-xl border border-gray-200 ${mode === 'print' ? 'px-3 py-1.5' : 'p-5 shadow-sm'}`}>
+      <div className={`bg-white rounded-xl border border-gray-200 ${mode === 'print' ? 'p-3' : 'p-5 shadow-sm'}`}>
         <div className="flex items-baseline justify-between gap-2 flex-wrap">
           <div>
-            <div className={`${mode === 'print' ? 'text-[9px]' : 'text-xs'} text-gray-500 uppercase tracking-wide font-semibold`}>
+            <div className={`${mode === 'print' ? 'text-[10px]' : 'text-xs'} text-gray-500 uppercase tracking-wide font-semibold`}>
               {sectionLabel} — Pitching
             </div>
-            <div className={`${mode === 'print' ? 'text-base leading-tight' : 'text-2xl'} font-bold text-gray-900`}>
+            <div className={`${mode === 'print' ? 'text-lg' : 'text-2xl'} font-bold text-gray-900`}>
               {teamName}
             </div>
           </div>
-          <div className={`text-right ${mode === 'print' ? 'text-[9px]' : 'text-sm'} text-gray-600`}>
+          <div className={`text-right ${mode === 'print' ? 'text-[10px]' : 'text-sm'} text-gray-600`}>
             <div className="font-semibold">{matchupHeader}</div>
             <div>{formatDate(probable.gameDate.slice(0, 10))}</div>
             {probable.venue && <div className="text-gray-500">{probable.venue}</div>}
