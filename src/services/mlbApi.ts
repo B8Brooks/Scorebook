@@ -443,6 +443,34 @@ function parseIp(ip: unknown): number {
   return w + f / 3;
 }
 
+function normalizePlayerName(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/[.,']/g, '')
+    .replace(/\s+jr$/i, '')
+    .replace(/\s+sr$/i, '')
+    .replace(/\s+iii$/i, '')
+    .replace(/\s+ii$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function fetchEspnBullpen(
+  teamId: number
+): Promise<Array<{ name: string; role: string }> | null> {
+  try {
+    const res = await fetch(`/api/espn-bullpen?team=${teamId}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data?.bullpen) || data.bullpen.length === 0) return null;
+    return data.bullpen;
+  } catch {
+    return null;
+  }
+}
+
 export async function getTeamRelievers(
   teamId: number,
   season: number
@@ -458,7 +486,7 @@ export async function getTeamRelievers(
   const data = await response.json();
   const roster = data?.roster ?? [];
 
-  const candidates: Array<{
+  interface Candidate {
     id: number;
     name: string;
     ip: number;
@@ -468,11 +496,20 @@ export async function getTeamRelievers(
     holds: number;
     gs: number;
     gp: number;
-  }> = [];
+  }
+
+  const candidates: Candidate[] = [];
+  const pitchersByName = new Map<string, { id: number; name: string }>();
 
   for (const entry of roster) {
     if (entry?.position?.code !== '1') continue; // pitchers only
     const person = entry.person || {};
+    if (person.id && person.fullName) {
+      pitchersByName.set(normalizePlayerName(person.fullName), {
+        id: person.id,
+        name: person.fullName,
+      });
+    }
     const statsBlock = (person.stats || []).find(
       (s: any) => s?.group?.displayName === 'pitching' && s?.type?.displayName === 'season'
     );
@@ -497,7 +534,26 @@ export async function getTeamRelievers(
     });
   }
 
-  // Saves dominate (closer signal); holds identify setup men;
+  // Try ESPN's editorial depth chart first.
+  const espnBullpen = await fetchEspnBullpen(teamId);
+  if (espnBullpen && espnBullpen.length > 0) {
+    const matched: RelieverRanking[] = [];
+    const seen = new Set<number>();
+    let score = espnBullpen.length;
+    for (const espnEntry of espnBullpen) {
+      const mlb = pitchersByName.get(normalizePlayerName(espnEntry.name));
+      if (mlb && !seen.has(mlb.id)) {
+        seen.add(mlb.id);
+        matched.push({ id: mlb.id, name: mlb.name, score });
+        score -= 1;
+      }
+      if (matched.length >= 4) break;
+    }
+    if (matched.length >= 3) return matched;
+    // Otherwise fall through to the stats-based heuristic.
+  }
+
+  // Fallback: saves dominate (closer signal); holds identify setup men;
   // K/9 and ERA are tiebreakers within a role tier.
   const ranked = candidates.map(c => {
     let score =
