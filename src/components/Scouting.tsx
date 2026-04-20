@@ -339,20 +339,20 @@ function TeamPage({
       {/* Bullpen */}
       <div>
         <h3 className={`font-bold text-gray-900 mb-2 ${mode === 'print' ? 'text-xs' : 'text-lg'}`}>
-          Bullpen — Top 3
+          Bullpen — Top 5
         </h3>
         {bullpen.length === 0 ? (
           <div className="text-sm italic text-gray-500 bg-white rounded-xl border border-gray-200 p-4">
             No reliever data available.
           </div>
         ) : (
-          <div className={`grid gap-3 ${mode === 'print' ? 'grid-cols-3' : 'grid-cols-1 lg:grid-cols-3'}`}>
+          <div className={`grid gap-2 ${mode === 'print' ? 'grid-cols-5' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-5'}`}>
             {bullpen.map((r, i) => (
               <PitcherCard
                 key={r.bio.id}
                 report={r}
                 role="Reliever"
-                label={i === 0 ? 'Likely Closer' : `Reliever #${i + 1}`}
+                label={bullpenLabel(i)}
                 mode={mode}
                 currentSeason={currentSeason}
               />
@@ -362,6 +362,12 @@ function TeamPage({
       </div>
     </section>
   );
+}
+
+function bullpenLabel(index: number): string {
+  if (index === 0) return 'Likely Closer';
+  if (index === 1 || index === 2) return 'Setup';
+  return 'Middle Relief';
 }
 
 function TBACard({ label, mode, name }: { label: string; mode: PitcherCardMode; name?: string }) {

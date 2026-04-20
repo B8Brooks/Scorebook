@@ -1,7 +1,6 @@
 import type { PitcherScoutingReport } from '../types';
 import { PitchArsenalBar } from './PitchArsenalBar';
 import { SplitsTable } from './SplitsTable';
-import { pitchColor } from '../utils/pitchColors';
 
 export type PitcherCardMode = 'full' | 'print' | 'text';
 
@@ -111,41 +110,6 @@ function TextView({ report, role, currentSeason }: { report: PitcherScoutingRepo
   );
 }
 
-function ArsenalTable({ arsenal }: { arsenal: PitcherScoutingReport['arsenal'] }) {
-  if (arsenal.length === 0) return null;
-  return (
-    <table className="w-full text-xs divide-y divide-gray-200 mt-2">
-      <thead className="bg-gray-50 text-gray-600 uppercase tracking-wide text-[10px]">
-        <tr>
-          <th className="text-left px-2 py-1">Pitch</th>
-          <th className="text-right px-2 py-1">Usage</th>
-          <th className="text-right px-2 py-1">Velo</th>
-          <th className="text-right px-2 py-1">Spin</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-gray-100">
-        {arsenal.map(p => {
-          const color = pitchColor(p.pitchType);
-          return (
-            <tr key={p.pitchType}>
-              <td className="px-2 py-1">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className={`w-2.5 h-2.5 rounded-sm ${color.bg}`}></span>
-                  <span className="font-semibold">{p.pitchType}</span>
-                  <span className="text-gray-500">{p.pitchName}</span>
-                </span>
-              </td>
-              <td className="px-2 py-1 text-right tabular-nums">{p.usagePct.toFixed(1)}%</td>
-              <td className="px-2 py-1 text-right tabular-nums">{p.avgVelo ? `${p.avgVelo.toFixed(1)}` : '—'}</td>
-              <td className="px-2 py-1 text-right tabular-nums">{p.avgSpin ? Math.round(p.avgSpin) : '—'}</td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  );
-}
-
 export function PitcherCard({ report, role, label, mode = 'full', currentSeason }: PitcherCardProps) {
   const { bio, season, vsRHB, vsLHB, arsenal, seasonUsed } = report;
   const showFallbackBadge = seasonUsed !== currentSeason;
@@ -207,7 +171,6 @@ export function PitcherCard({ report, role, label, mode = 'full', currentSeason 
           Arsenal
         </div>
         <PitchArsenalBar arsenal={arsenal} compact={compact} />
-        {!compact && <ArsenalTable arsenal={arsenal} />}
       </div>
     </div>
   );

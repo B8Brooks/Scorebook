@@ -14,8 +14,7 @@ function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
   };
 }
 
-function arcPath(startAngle: number, endAngle: number, cx = 50, cy = 50, r = 45): string {
-  // Full-circle edge case: browsers won't render an arc where start === end.
+function arcPath(startAngle: number, endAngle: number, cx: number, cy: number, r: number): string {
   if (endAngle - startAngle >= 359.999) {
     return `M ${cx - r} ${cy} A ${r} ${r} 0 1 0 ${cx + r} ${cy} A ${r} ${r} 0 1 0 ${cx - r} ${cy} Z`;
   }
@@ -34,61 +33,104 @@ export function PitchArsenalBar({ arsenal, compact = false }: PitchArsenalProps)
 
   const total = arsenal.reduce((sum, a) => sum + a.usagePct, 0) || 100;
 
+  // Layout constants — scaled for compact vs full.
+  const W = compact ? 260 : 320;
+  const H = compact ? 22 * arsenal.length + 10 : 26 * arsenal.length + 14;
+  const cx = compact ? 50 : 60;
+  const cy = H / 2;
+  const r = compact ? 40 : 50;
+  const legendX = compact ? 120 : 140;
+  const lineEndX = legendX - 8;
+  const rowHeight = compact ? 22 : 26;
+  const legendTop = (H - rowHeight * arsenal.length) / 2 + rowHeight / 2;
+  const codeFont = compact ? 9 : 11;
+  const nameFont = compact ? 9 : 10;
+  const statFont = compact ? 9 : 10;
+
   let cursor = 0;
-  const slices = arsenal.map(pitch => {
+  const slices = arsenal.map((pitch, i) => {
     const sweep = (pitch.usagePct / total) * 360;
-    const slice = {
-      pitch,
-      startAngle: cursor,
-      endAngle: cursor + sweep,
-      color: pitchColor(pitch.pitchType),
-    };
+    const startAngle = cursor;
+    const endAngle = cursor + sweep;
     cursor += sweep;
-    return slice;
+    const mid = (startAngle + endAngle) / 2;
+    const outer = polarToCartesian(cx, cy, r, mid);
+    const legendY = legendTop + i * rowHeight;
+    return {
+      pitch,
+      startAngle,
+      endAngle,
+      color: pitchColor(pitch.pitchType),
+      outer,
+      legendY,
+    };
   });
 
-  const pieSize = compact ? 80 : 120;
-
   return (
-    <div className="flex items-center gap-3">
-      <svg
-        viewBox="0 0 100 100"
-        width={pieSize}
-        height={pieSize}
-        className="shrink-0"
-        aria-label="Pitch arsenal distribution"
-      >
-        {slices.map(slice => (
-          <path
-            key={slice.pitch.pitchType}
-            d={arcPath(slice.startAngle, slice.endAngle)}
-            fill={slice.color.fill}
-            stroke="white"
-            strokeWidth="0.75"
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      width="100%"
+      style={{ maxWidth: W, height: 'auto' }}
+      aria-label="Pitch arsenal distribution"
+    >
+      {/* Pie slices */}
+      {slices.map(slice => (
+        <path
+          key={`slice-${slice.pitch.pitchType}`}
+          d={arcPath(slice.startAngle, slice.endAngle, cx, cy, r)}
+          fill={slice.color.fill}
+          stroke="white"
+          strokeWidth="0.75"
+        >
+          <title>{`${slice.pitch.pitchName} ${slice.pitch.usagePct.toFixed(1)}%`}</title>
+        </path>
+      ))}
+
+      {/* Leader lines: slice edge → legend dot */}
+      {slices.map(slice => (
+        <polyline
+          key={`line-${slice.pitch.pitchType}`}
+          points={`${slice.outer.x},${slice.outer.y} ${lineEndX - 4},${slice.legendY} ${lineEndX},${slice.legendY}`}
+          fill="none"
+          stroke="#6b7280"
+          strokeWidth="0.6"
+        />
+      ))}
+
+      {/* Legend rows (dot + pitch code + name on one line, % + velo on the right) */}
+      {slices.map(slice => (
+        <g key={`legend-${slice.pitch.pitchType}`}>
+          <circle cx={lineEndX + 3} cy={slice.legendY} r={3} fill={slice.color.fill} />
+          <text
+            x={lineEndX + 10}
+            y={slice.legendY + codeFont / 3}
+            fontSize={codeFont}
+            fontWeight="700"
+            fill="#111827"
           >
-            <title>{`${slice.pitch.pitchName} ${slice.pitch.usagePct.toFixed(1)}%`}</title>
-          </path>
-        ))}
-      </svg>
-      <div className={`flex-1 min-w-0 grid grid-cols-1 ${compact ? 'gap-y-0.5' : 'gap-y-1'}`}>
-        {arsenal.map(pitch => {
-          const color = pitchColor(pitch.pitchType);
-          return (
-            <div
-              key={pitch.pitchType}
-              className={`flex items-center gap-1.5 ${compact ? 'text-[10px]' : 'text-xs'}`}
-            >
-              <span className={`inline-block w-2.5 h-2.5 rounded-sm shrink-0 ${color.bg}`}></span>
-              <span className="font-semibold text-gray-800 w-6 shrink-0">{pitch.pitchType}</span>
-              <span className="text-gray-500 truncate">{pitch.pitchName}</span>
-              <span className="ml-auto font-medium text-gray-700 tabular-nums whitespace-nowrap">
-                {pitch.usagePct.toFixed(1)}%
-                {pitch.avgVelo ? ` · ${pitch.avgVelo.toFixed(1)} mph` : ''}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+            {slice.pitch.pitchType}
+          </text>
+          <text
+            x={lineEndX + 10 + codeFont * 1.8}
+            y={slice.legendY + nameFont / 3}
+            fontSize={nameFont}
+            fill="#4b5563"
+          >
+            {slice.pitch.pitchName}
+          </text>
+          <text
+            x={W - 2}
+            y={slice.legendY + statFont / 3}
+            fontSize={statFont}
+            fontWeight="600"
+            fill="#374151"
+            textAnchor="end"
+          >
+            {slice.pitch.usagePct.toFixed(1)}%
+            {slice.pitch.avgVelo ? ` · ${slice.pitch.avgVelo.toFixed(1)}` : ''}
+          </text>
+        </g>
+      ))}
+    </svg>
   );
 }
