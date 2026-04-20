@@ -1,24 +1,24 @@
-const PITCH_COLORS: Record<string, { bg: string; ring: string }> = {
-  FF: { bg: 'bg-red-600', ring: 'ring-red-600' },
-  FT: { bg: 'bg-red-500', ring: 'ring-red-500' },
-  FA: { bg: 'bg-red-500', ring: 'ring-red-500' },
-  SI: { bg: 'bg-orange-500', ring: 'ring-orange-500' },
-  FC: { bg: 'bg-rose-500', ring: 'ring-rose-500' },
-  SL: { bg: 'bg-blue-600', ring: 'ring-blue-600' },
-  ST: { bg: 'bg-blue-500', ring: 'ring-blue-500' },
-  SV: { bg: 'bg-indigo-500', ring: 'ring-indigo-500' },
-  CU: { bg: 'bg-sky-600', ring: 'ring-sky-600' },
-  KC: { bg: 'bg-sky-500', ring: 'ring-sky-500' },
-  CS: { bg: 'bg-sky-700', ring: 'ring-sky-700' },
-  EP: { bg: 'bg-indigo-400', ring: 'ring-indigo-400' },
-  CH: { bg: 'bg-emerald-600', ring: 'ring-emerald-600' },
-  FS: { bg: 'bg-emerald-500', ring: 'ring-emerald-500' },
-  FO: { bg: 'bg-teal-500', ring: 'ring-teal-500' },
-  KN: { bg: 'bg-purple-500', ring: 'ring-purple-500' },
+const PITCH_COLORS: Record<string, { bg: string; fill: string }> = {
+  FF: { bg: 'bg-red-600', fill: '#dc2626' },
+  FT: { bg: 'bg-red-500', fill: '#ef4444' },
+  FA: { bg: 'bg-red-500', fill: '#ef4444' },
+  SI: { bg: 'bg-orange-500', fill: '#f97316' },
+  FC: { bg: 'bg-rose-500', fill: '#f43f5e' },
+  SL: { bg: 'bg-blue-600', fill: '#2563eb' },
+  ST: { bg: 'bg-blue-500', fill: '#3b82f6' },
+  SV: { bg: 'bg-indigo-500', fill: '#6366f1' },
+  CU: { bg: 'bg-sky-600', fill: '#0284c7' },
+  KC: { bg: 'bg-sky-500', fill: '#0ea5e9' },
+  CS: { bg: 'bg-sky-700', fill: '#0369a1' },
+  EP: { bg: 'bg-indigo-400', fill: '#818cf8' },
+  CH: { bg: 'bg-emerald-600', fill: '#059669' },
+  FS: { bg: 'bg-emerald-500', fill: '#10b981' },
+  FO: { bg: 'bg-teal-500', fill: '#14b8a6' },
+  KN: { bg: 'bg-purple-500', fill: '#a855f7' },
 };
 
-const DEFAULT_COLOR = { bg: 'bg-gray-400', ring: 'ring-gray-400' };
+const DEFAULT_COLOR = { bg: 'bg-gray-400', fill: '#9ca3af' };
 
-export function pitchColor(code: string): { bg: string; ring: string } {
+export function pitchColor(code: string): { bg: string; fill: string } {
   return PITCH_COLORS[code] ?? DEFAULT_COLOR;
 }
