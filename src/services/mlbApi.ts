@@ -547,7 +547,7 @@ export async function getTeamRelievers(
         matched.push({ id: mlb.id, name: mlb.name, score });
         score -= 1;
       }
-      if (matched.length >= 4) break;
+      if (matched.length >= 6) break;
     }
     if (matched.length >= 3) return matched;
     // Otherwise fall through to the stats-based heuristic.
@@ -566,7 +566,7 @@ export async function getTeamRelievers(
   });
 
   ranked.sort((a, b) => b.score - a.score);
-  return ranked.slice(0, 4);
+  return ranked.slice(0, 6);
 }
 
 function parseBio(person: any): PitcherBio {

@@ -431,14 +431,14 @@ function TeamPage({
       {/* Bullpen */}
       <div>
         <h3 className={`font-bold text-gray-900 mb-2 ${mode === 'print' ? 'text-xs' : 'text-lg'}`}>
-          Bullpen — Top 4
+          Bullpen — Top 6
         </h3>
         {bullpen.length === 0 ? (
           <div className="text-sm italic text-gray-500 bg-white rounded-xl border border-gray-200 p-4">
             No reliever data available.
           </div>
         ) : (
-          <div className={`grid gap-2 ${mode === 'print' ? 'grid-cols-4' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'}`}>
+          <div className={`grid gap-2 ${mode === 'print' ? 'grid-cols-3' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
             {bullpen.map((r, i) => (
               <PitcherCard
                 key={r.bio.id}
