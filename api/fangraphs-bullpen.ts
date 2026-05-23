@@ -181,22 +181,59 @@ export default async function handler(req: Request): Promise<Response> {
     body.htmlLength = html.length;
     body.blobCount = blobs.length;
     body.harvestedCount = all.length;
-    body.blobTopKeys = blobs.map(b =>
-      b && typeof b === 'object' ? Object.keys(b as Record<string, unknown>).slice(0, 30) : typeof b
-    );
     body.hasNextData = html.includes('__NEXT_DATA__');
-    // Surface any candidate data/API URLs referenced by the page.
-    body.apiHints = Array.from(
-      new Set(
-        (html.match(/["'](\/api\/[^"']+|https?:\/\/[^"']*fangraphs[^"']*\/api\/[^"']+|[^"']+\.json)["']/g) || [])
-          .map(s => s.replace(/["']/g, ''))
-          .slice(0, 25)
-      )
-    );
-    body.harvestSample = all.slice(0, 40);
+    // Map every array-of-objects in the Next.js payload: path + element keys.
+    // This shows where the depth-chart data lives and what fields players have.
+    const nextData = blobs[0] as Record<string, unknown> | undefined;
+    const pageProps =
+      (nextData?.props as Record<string, unknown> | undefined)?.pageProps ?? nextData?.props;
+    const arrayMap: Array<{ path: string; len: number; keys: string[] }> = [];
+    mapArrays(pageProps, 'pageProps', arrayMap, 0);
+    body.arrayMap = arrayMap.slice(0, 60);
+    // Locate a few known surnames to anchor where players actually sit.
+    body.nameProbe = probeNames(JSON.stringify(pageProps ?? {}), [
+      'Bednar',
+      'Williams',
+      'Weaver',
+      'Doval',
+    ]);
   }
 
   return Response.json(body, {
     headers: { 'Cache-Control': 's-maxage=3600, stale-while-revalidate=86400' },
   });
+}
+
+// Records the path and element-key sample of every array-of-objects, so we can
+// see how the FanGraphs payload is shaped without dumping megabytes.
+function mapArrays(
+  node: unknown,
+  path: string,
+  out: Array<{ path: string; len: number; keys: string[] }>,
+  depth: number
+): void {
+  if (depth > 8 || out.length >= 60 || !node || typeof node !== 'object') return;
+  if (Array.isArray(node)) {
+    const first = node.find(x => x && typeof x === 'object' && !Array.isArray(x));
+    if (first) {
+      out.push({ path, len: node.length, keys: Object.keys(first as object).slice(0, 25) });
+    }
+    // Recurse into the first couple elements only.
+    for (let i = 0; i < Math.min(node.length, 2); i++) {
+      mapArrays(node[i], `${path}[${i}]`, out, depth + 1);
+    }
+    return;
+  }
+  for (const key of Object.keys(node as Record<string, unknown>)) {
+    mapArrays((node as Record<string, unknown>)[key], `${path}.${key}`, out, depth + 1);
+  }
+}
+
+function probeNames(json: string, names: string[]): Record<string, string | null> {
+  const result: Record<string, string | null> = {};
+  for (const name of names) {
+    const idx = json.indexOf(name);
+    result[name] = idx >= 0 ? json.slice(Math.max(0, idx - 120), idx + 80) : null;
+  }
+  return result;
 }
