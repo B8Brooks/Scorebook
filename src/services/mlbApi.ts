@@ -459,7 +459,7 @@ function normalizePlayerName(name: string): string {
 
 async function fetchFangraphsBullpen(
   teamId: number
-): Promise<Array<{ name: string; role: string }> | null> {
+): Promise<Array<{ name: string; role: string; mlbamid?: number }> | null> {
   try {
     const res = await fetch(`/api/fangraphs-bullpen?team=${teamId}`);
     if (!res.ok) return null;
@@ -500,6 +500,7 @@ export async function getTeamRelievers(
 
   const candidates: Candidate[] = [];
   const pitchersByName = new Map<string, { id: number; name: string }>();
+  const pitchersById = new Map<number, { id: number; name: string }>();
 
   for (const entry of roster) {
     if (entry?.position?.code !== '1') continue; // pitchers only
@@ -509,6 +510,7 @@ export async function getTeamRelievers(
         id: person.id,
         name: person.fullName,
       });
+      pitchersById.set(person.id, { id: person.id, name: person.fullName });
     }
     const statsBlock = (person.stats || []).find(
       (s: any) => s?.group?.displayName === 'pitching' && s?.type?.displayName === 'season'
@@ -547,11 +549,14 @@ export async function getTeamRelievers(
   const seen = new Set<number>();
 
   // Primary source: FanGraphs' editorial closer depth chart, in role order.
+  // Match by MLBAM id first (exact), falling back to a normalized name match.
   const fgBullpen = await fetchFangraphsBullpen(teamId);
   if (fgBullpen && fgBullpen.length > 0) {
     let score = fgBullpen.length;
     for (const entry of fgBullpen) {
-      const mlb = pitchersByName.get(normalizePlayerName(entry.name));
+      const mlb =
+        (entry.mlbamid != null ? pitchersById.get(entry.mlbamid) : undefined) ??
+        pitchersByName.get(normalizePlayerName(entry.name));
       if (mlb && !seen.has(mlb.id)) {
         seen.add(mlb.id);
         matched.push({ id: mlb.id, name: mlb.name, score, role: entry.role });
