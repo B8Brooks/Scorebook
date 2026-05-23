@@ -457,11 +457,11 @@ function normalizePlayerName(name: string): string {
     .trim();
 }
 
-async function fetchEspnBullpen(
+async function fetchFangraphsBullpen(
   teamId: number
 ): Promise<Array<{ name: string; role: string }> | null> {
   try {
-    const res = await fetch(`/api/espn-bullpen?team=${teamId}`);
+    const res = await fetch(`/api/fangraphs-bullpen?team=${teamId}`);
     if (!res.ok) return null;
     const data = await res.json();
     if (!Array.isArray(data?.bullpen) || data.bullpen.length === 0) return null;
@@ -534,39 +534,42 @@ export async function getTeamRelievers(
     });
   }
 
-  // Try ESPN's editorial depth chart first.
-  const espnBullpen = await fetchEspnBullpen(teamId);
-  if (espnBullpen && espnBullpen.length > 0) {
-    const matched: RelieverRanking[] = [];
-    const seen = new Set<number>();
-    let score = espnBullpen.length;
-    for (const espnEntry of espnBullpen) {
-      const mlb = pitchersByName.get(normalizePlayerName(espnEntry.name));
+  // Saves dominate (closer signal); holds identify setup men; K/9 and ERA
+  // are tiebreakers. Used both to top up the FanGraphs list and as a full
+  // fallback when FanGraphs is unavailable.
+  const statsScore = (c: Candidate): number => {
+    const base = c.saves * 5 + c.holds * 1.5 + c.k9 * 0.4 + (5.0 - c.era) * 0.3;
+    return c.ip < 5 ? base * 0.5 : base; // small-sample penalty
+  };
+  const statsRanked = [...candidates].sort((a, b) => statsScore(b) - statsScore(a));
+
+  const matched: RelieverRanking[] = [];
+  const seen = new Set<number>();
+
+  // Primary source: FanGraphs' editorial closer depth chart, in role order.
+  const fgBullpen = await fetchFangraphsBullpen(teamId);
+  if (fgBullpen && fgBullpen.length > 0) {
+    let score = fgBullpen.length;
+    for (const entry of fgBullpen) {
+      const mlb = pitchersByName.get(normalizePlayerName(entry.name));
       if (mlb && !seen.has(mlb.id)) {
         seen.add(mlb.id);
-        matched.push({ id: mlb.id, name: mlb.name, score });
+        matched.push({ id: mlb.id, name: mlb.name, score, role: entry.role });
         score -= 1;
       }
       if (matched.length >= 6) break;
     }
-    if (matched.length >= 3) return matched;
-    // Otherwise fall through to the stats-based heuristic.
   }
 
-  // Fallback: saves dominate (closer signal); holds identify setup men;
-  // K/9 and ERA are tiebreakers within a role tier.
-  const ranked = candidates.map(c => {
-    let score =
-      c.saves * 5 +
-      c.holds * 1.5 +
-      c.k9 * 0.4 +
-      (5.0 - c.era) * 0.3;
-    if (c.ip < 5) score *= 0.5; // small-sample penalty
-    return { id: c.id, name: c.name, score };
-  });
+  // Top up to six from the stats ranking so the bullpen is always full.
+  for (const c of statsRanked) {
+    if (matched.length >= 6) break;
+    if (seen.has(c.id)) continue;
+    seen.add(c.id);
+    matched.push({ id: c.id, name: c.name, score: 0 });
+  }
 
-  ranked.sort((a, b) => b.score - a.score);
-  return ranked.slice(0, 6);
+  return matched.slice(0, 6);
 }
 
 function parseBio(person: any): PitcherBio {

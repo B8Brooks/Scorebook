@@ -237,4 +237,5 @@ export interface RelieverRanking {
   id: number;
   name: string;
   score: number;
+  role?: string;
 }

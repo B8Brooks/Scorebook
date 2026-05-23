@@ -21,6 +21,9 @@ import { LineupSection } from './LineupSection';
 
 const RED_SOX_ID = 111;
 
+// A scouting report plus the depth-chart role (Closer/Setup/Middle Relief) it was ranked at.
+type BullpenReport = PitcherScoutingReport & { depthRole?: string };
+
 function todayIso(): string {
   return new Date().toISOString().split('T')[0];
 }
@@ -45,8 +48,8 @@ export function Scouting() {
   const [probable, setProbable] = useState<ProbablePitcherInfo | null>(null);
   const [homeStarter, setHomeStarter] = useState<PitcherScoutingReport | null>(null);
   const [awayStarter, setAwayStarter] = useState<PitcherScoutingReport | null>(null);
-  const [opponentBullpen, setOpponentBullpen] = useState<PitcherScoutingReport[]>([]);
-  const [selectedBullpen, setSelectedBullpen] = useState<PitcherScoutingReport[]>([]);
+  const [opponentBullpen, setOpponentBullpen] = useState<BullpenReport[]>([]);
+  const [selectedBullpen, setSelectedBullpen] = useState<BullpenReport[]>([]);
   const [opponentName, setOpponentName] = useState<string>('');
   const [selectedName, setSelectedName] = useState<string>('');
   const [opponentLineup, setOpponentLineup] = useState<TeamLineup | null>(null);
@@ -104,12 +107,15 @@ export function Scouting() {
 
       const loadBullpen = async (
         targetTeamId: number,
-        setter: (reports: PitcherScoutingReport[]) => void
+        setter: (reports: BullpenReport[]) => void
       ) => {
         try {
           const rankings = await getTeamRelievers(targetTeamId, currentSeason);
           const reports = await Promise.all(
-            rankings.map(r => getPitcherScoutingReport(r.id, currentSeason))
+            rankings.map(async (r): Promise<BullpenReport> => {
+              const report = await getPitcherScoutingReport(r.id, currentSeason);
+              return { ...report, depthRole: r.role };
+            })
           );
           setter(reports);
         } catch {
@@ -356,7 +362,7 @@ interface TeamPageProps {
   currentSeason: number;
   starter: PitcherScoutingReport | null;
   starterSide: 'home' | 'away';
-  bullpen: PitcherScoutingReport[];
+  bullpen: BullpenReport[];
   isFirstPage: boolean;
   lineup: TeamLineup | null;
   opposingStarterHand?: 'L' | 'R' | 'S';
@@ -444,7 +450,7 @@ function TeamPage({
                 key={r.bio.id}
                 report={r}
                 role="Reliever"
-                label={bullpenLabel(i)}
+                label={r.depthRole ?? bullpenLabel(i)}
                 mode={mode}
                 currentSeason={currentSeason}
               />
