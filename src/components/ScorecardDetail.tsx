@@ -1,29 +1,44 @@
-import { useState } from 'react';
-import type { Scorecard, ParsedScorecardData } from '../types';
+import { useEffect, useMemo, useState } from 'react';
+import type { Scorecard, ParsedScorecardData, InterpretedScorecard, PlayByPlay } from '../types';
 import { GameStats } from './GameStats';
 import { OfficialScorecard } from './OfficialScorecard';
+import { VerificationGrid } from './VerificationGrid';
 import { extractTextFromImage, parseScorecard, getResultDescription, type OCRProgress } from '../services/ocr';
-import { interpretScorecard, type InterpretedScorecard } from '../services/gemini';
+import { interpretScorecard } from '../services/gemini';
+import { getPlayByPlay } from '../services/mlbApi';
+import { verifyScorecard } from '../services/verification';
 import { getGeminiApiKey, saveTrainingExample, getTrainingExamples, generateId } from '../services/storage';
 
 interface ScorecardDetailProps {
   scorecard: Scorecard;
   onClose: () => void;
-  onUpdate: (id: string, parsedData: ParsedScorecardData) => void;
+  onUpdate: (id: string, updates: Partial<Scorecard>) => void;
 }
 
+type DetailTab = 'verify' | 'compare' | 'scorecard' | 'official' | 'stats' | 'ocr';
+
 export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetailProps) {
-  const [activeTab, setActiveTab] = useState<'compare' | 'scorecard' | 'official' | 'stats' | 'ocr'>('compare');
+  const [activeTab, setActiveTab] = useState<DetailTab>(
+    scorecard.interpretation || getGeminiApiKey() ? 'verify' : 'compare'
+  );
   const [ocrProgress, setOcrProgress] = useState<OCRProgress | null>(null);
   const [ocrResult, setOcrResult] = useState<ParsedScorecardData | null>(
     scorecard.parsedData || null
   );
   const [isProcessing, setIsProcessing] = useState(false);
-  const [geminiResult, setGeminiResult] = useState<InterpretedScorecard | null>(null);
+  const [geminiResult, setGeminiResult] = useState<InterpretedScorecard | null>(
+    scorecard.interpretation || null
+  );
+  const [resolutions, setResolutions] = useState<Record<string, 'mine' | 'official'>>(
+    scorecard.resolutions || {}
+  );
   const [useGemini, setUseGemini] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editedResult, setEditedResult] = useState<InterpretedScorecard | null>(null);
   const [trainingCount, setTrainingCount] = useState(getTrainingExamples().length);
+  const [playByPlay, setPlayByPlay] = useState<PlayByPlay | null>(null);
+  const [pbpLoading, setPbpLoading] = useState(false);
+  const [pbpError, setPbpError] = useState<string | null>(null);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -31,6 +46,53 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
       year: 'numeric',
       month: 'long',
       day: 'numeric',
+    });
+  };
+
+  // Lazily fetch the official play-by-play the first time the Verify tab opens.
+  useEffect(() => {
+    if (activeTab !== 'verify' || playByPlay || pbpLoading) return;
+    setPbpLoading(true);
+    setPbpError(null);
+    getPlayByPlay(scorecard.game.gamePk)
+      .then(setPlayByPlay)
+      .catch(err => setPbpError(err instanceof Error ? err.message : 'Failed to load play-by-play'))
+      .finally(() => setPbpLoading(false));
+  }, [activeTab, playByPlay, pbpLoading, scorecard.game.gamePk]);
+
+  const verification = useMemo(() => {
+    if (!geminiResult || !playByPlay) return null;
+    return verifyScorecard(geminiResult, playByPlay, resolutions);
+  }, [geminiResult, playByPlay, resolutions]);
+
+  const handleResolve = (key: string, choice: 'mine' | 'official', officialNotation?: string) => {
+    const newResolutions = { ...resolutions, [key]: choice };
+    let newInterpretation = geminiResult;
+
+    if (choice === 'official' && officialNotation && geminiResult) {
+      // Rewrite the corrected cell in the interpretation itself.
+      const [side, batterIdxStr, inningStr, slotStr] = key.split(':');
+      const batterIdx = parseInt(batterIdxStr, 10);
+      const inning = parseInt(inningStr, 10);
+      const slot = parseInt(slotStr, 10);
+      const copy: InterpretedScorecard = JSON.parse(JSON.stringify(geminiResult));
+      const batters = side === 'home' ? copy.homeBatters : copy.awayBatters;
+      const batter = batters[batterIdx];
+      if (batter) {
+        const inningAtBats = batter.atBats.filter(ab => ab.inning === inning);
+        const target = inningAtBats[slot];
+        if (target) {
+          target.result = officialNotation;
+          newInterpretation = copy;
+          setGeminiResult(copy);
+        }
+      }
+    }
+
+    setResolutions(newResolutions);
+    onUpdate(scorecard.id, {
+      interpretation: newInterpretation ?? undefined,
+      resolutions: newResolutions,
     });
   };
 
@@ -44,6 +106,8 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
       try {
         const result = await interpretScorecard(scorecard.imageUrl, apiKey);
         setGeminiResult(result);
+        // Persist so verification survives closing the modal / reloading.
+        onUpdate(scorecard.id, { interpretation: result });
         setOcrProgress(null);
       } catch (error) {
         console.error('Gemini interpretation failed:', error);
@@ -63,7 +127,7 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
 
         const parsed = parseScorecard(text, confidence);
         setOcrResult(parsed);
-        onUpdate(scorecard.id, parsed);
+        onUpdate(scorecard.id, { parsedData: parsed });
       } catch (error) {
         console.error('OCR failed:', error);
         alert('Failed to process scorecard. Please try again.');
@@ -119,6 +183,8 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
 
     saveTrainingExample(example);
     setGeminiResult(editedResult);
+    // Manual corrections are the best version of the read — persist them.
+    onUpdate(scorecard.id, { interpretation: editedResult });
     setEditedResult(null);
     setIsEditing(false);
     setTrainingCount(getTrainingExamples().length);
@@ -153,6 +219,16 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
 
           {/* Tabs */}
           <div className="flex gap-2 mt-4 flex-wrap">
+            <button
+              onClick={() => setActiveTab('verify')}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                activeTab === 'verify'
+                  ? 'bg-white text-green-700'
+                  : 'text-green-100 hover:bg-green-500'
+              }`}
+            >
+              Verify
+            </button>
             <button
               onClick={() => setActiveTab('compare')}
               className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
@@ -208,6 +284,77 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
+          {activeTab === 'verify' && (
+            <div className="space-y-4 max-w-6xl mx-auto">
+              {!geminiResult ? (
+                <div className="max-w-xl mx-auto text-center py-10 space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Verify your scorecard against the official record
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    First the AI reads your handwritten card, then every at-bat is checked
+                    cell-by-cell against MLB's official play-by-play. Matches get a ✓,
+                    conflicts get a ✗ you can review and fix.
+                  </p>
+                  {hasGeminiKey ? (
+                    <button
+                      onClick={handleRunOCR}
+                      disabled={isProcessing}
+                      className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                        isProcessing
+                          ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                          : 'bg-green-600 text-white hover:bg-green-700'
+                      }`}
+                    >
+                      {isProcessing ? 'Reading scorecard…' : 'Read Scorecard & Verify'}
+                    </button>
+                  ) : (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+                      Verification needs a Gemini API key to read your handwriting. Add one
+                      in <strong>Settings</strong> (the gear icon), then come back here.
+                    </div>
+                  )}
+                  {isProcessing && ocrProgress && (
+                    <div className="flex items-center justify-center gap-2 text-sm text-blue-600">
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
+                      {ocrProgress.status}...
+                    </div>
+                  )}
+                </div>
+              ) : pbpLoading ? (
+                <div className="text-center py-10">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600 mx-auto mb-3"></div>
+                  <p className="text-gray-600 text-sm">Loading official play-by-play…</p>
+                </div>
+              ) : pbpError ? (
+                <div className="text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded-lg">
+                  {pbpError}
+                </div>
+              ) : verification ? (
+                <>
+                  <div className="flex items-center justify-end">
+                    <button
+                      onClick={() => {
+                        setGeminiResult(null);
+                        setResolutions({});
+                        onUpdate(scorecard.id, { interpretation: undefined, resolutions: {} });
+                      }}
+                      className="text-xs text-gray-500 hover:text-gray-700"
+                    >
+                      Re-read scorecard
+                    </button>
+                  </div>
+                  <VerificationGrid
+                    result={verification}
+                    awayTeamName={scorecard.game.teams.away.team.name}
+                    homeTeamName={scorecard.game.teams.home.team.name}
+                    onResolve={handleResolve}
+                  />
+                </>
+              ) : null}
+            </div>
+          )}
+
           {activeTab === 'compare' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Your Scorecard */}

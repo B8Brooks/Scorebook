@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import type { Scorecard, ParsedScorecardData } from '../types';
+import type { Scorecard } from '../types';
 import { ScorecardDetail } from './ScorecardDetail';
 
 interface ScorecardGalleryProps {
   scorecards: Scorecard[];
   onDelete: (id: string) => void;
-  onUpdate: (id: string, parsedData: ParsedScorecardData) => void;
+  onUpdate: (id: string, updates: Partial<Scorecard>) => void;
 }
 
 export function ScorecardGallery({ scorecards, onDelete, onUpdate }: ScorecardGalleryProps) {

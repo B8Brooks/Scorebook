@@ -33,6 +33,63 @@ export interface Scorecard {
   createdAt: string;
   notes?: string;
   parsedData?: ParsedScorecardData;
+  interpretation?: InterpretedScorecard;
+  resolutions?: Record<string, 'mine' | 'official'>;
+}
+
+// AI-interpreted scorecard (Gemini full-grid read)
+export interface BatterInning {
+  inning: number;
+  result: string; // e.g., "K", "BB", "6-3", "1B", "HR"
+  rbi?: number;
+  runs?: number;
+}
+
+export interface InterpretedBatter {
+  name: string;
+  position?: string;
+  number?: string;
+  atBats: BatterInning[];
+}
+
+export interface InterpretedScorecard {
+  homeTeam: string | null;
+  awayTeam: string | null;
+  date: string | null;
+  homeBatters: InterpretedBatter[];
+  awayBatters: InterpretedBatter[];
+  rawResponse?: string;
+}
+
+// Verification of an interpreted scorecard against the official play-by-play
+export type CellVerdict = 'match' | 'mismatch' | 'unknown';
+
+export interface VerifiedAtBat {
+  inning: number;
+  slot: number; // k-th PA by this batter in this inning
+  mine?: string;
+  official?: string;
+  officialDescription?: string;
+  verdict: CellVerdict;
+  resolution?: 'mine' | 'official';
+}
+
+export interface VerifiedBatterRow {
+  name: string;
+  matchedOfficialName?: string;
+  officialBatterId?: number;
+  unmatched?: boolean;
+  atBats: VerifiedAtBat[];
+}
+
+export interface VerificationResult {
+  away: VerifiedBatterRow[];
+  home: VerifiedBatterRow[];
+  officialOnly: Array<{ side: 'away' | 'home'; name: string; batterId: number }>;
+  matches: number;
+  mismatches: number;
+  unknowns: number;
+  accuracyPct: number;
 }
 
 export interface MLBScheduleResponse {

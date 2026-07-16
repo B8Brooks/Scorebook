@@ -8,7 +8,7 @@ import { getScorecards, saveScorecard, deleteScorecard, updateScorecard, generat
 import { compressImage } from './utils/imageUtils';
 import { detectGameInfo } from './services/ocr';
 import { analyzeScorecard } from './services/gemini';
-import type { Game, Scorecard, ParsedScorecardData } from './types';
+import type { Game, Scorecard } from './types';
 
 type View = 'gallery' | 'upload' | 'scout';
 
@@ -106,8 +106,8 @@ function App() {
     }
   }, []);
 
-  const handleUpdateParsedData = useCallback((id: string, parsedData: ParsedScorecardData) => {
-    updateScorecard(id, { parsedData });
+  const handleUpdateScorecard = useCallback((id: string, updates: Partial<Scorecard>) => {
+    updateScorecard(id, updates);
     setScorecards(getScorecards());
   }, []);
 
@@ -206,7 +206,7 @@ function App() {
                 {scorecards.length} {scorecards.length === 1 ? 'card' : 'cards'}
               </span>
             </div>
-            <ScorecardGallery scorecards={scorecards} onDelete={handleDelete} onUpdate={handleUpdateParsedData} />
+            <ScorecardGallery scorecards={scorecards} onDelete={handleDelete} onUpdate={handleUpdateScorecard} />
           </div>
         )}
 

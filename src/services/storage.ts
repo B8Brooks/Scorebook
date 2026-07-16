@@ -1,5 +1,4 @@
-import type { Scorecard } from '../types';
-import type { InterpretedScorecard } from './gemini';
+import type { Scorecard, InterpretedScorecard } from '../types';
 
 const STORAGE_KEY = 'mlb-scorecards';
 const SETTINGS_KEY = 'mlb-scorebook-settings';

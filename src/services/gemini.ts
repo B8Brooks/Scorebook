@@ -1,35 +1,15 @@
 // Gemini API service for advanced OCR and scorecard interpretation
 
 import { getTrainingExamples, type TrainingExample } from './storage';
+import type { InterpretedScorecard } from '../types';
+
+export type { BatterInning, InterpretedBatter, InterpretedScorecard } from '../types';
 
 export interface GeminiResponse {
   date: string | null;
   homeTeam: string | null;
   awayTeam: string | null;
   rawText?: string;
-}
-
-export interface BatterInning {
-  inning: number;
-  result: string;  // e.g., "K", "BB", "6-3", "1B", "HR"
-  rbi?: number;
-  runs?: number;
-}
-
-export interface InterpretedBatter {
-  name: string;
-  position?: string;
-  number?: string;
-  atBats: BatterInning[];
-}
-
-export interface InterpretedScorecard {
-  homeTeam: string | null;
-  awayTeam: string | null;
-  date: string | null;
-  homeBatters: InterpretedBatter[];
-  awayBatters: InterpretedBatter[];
-  rawResponse?: string;
 }
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
