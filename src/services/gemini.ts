@@ -144,6 +144,7 @@ async function generateWithFallback(
 ): Promise<GenerateResponse> {
   const backoffs = [0, 2500, 5000]; // ms before each round
   const dead = new Set<string>();
+  const lastStatus = new Map<string, number>(); // per-model last outcome, for diagnostics
   let lastErr: unknown;
   for (let round = 0; round < backoffs.length; round++) {
     if (backoffs[round] > 0) await delay(backoffs[round]);
@@ -154,6 +155,7 @@ async function generateWithFallback(
       } catch (err) {
         lastErr = err;
         const status = err instanceof GeminiHttpError ? err.status : 0;
+        lastStatus.set(model, status);
         if (status === 429 || status === 404) {
           dead.add(model); // hard cap / missing — stop trying it
           continue;
@@ -164,7 +166,14 @@ async function generateWithFallback(
     }
     if (dead.size >= chain.length) break; // nothing left worth retrying
   }
-  throw lastErr;
+
+  // Every model failed. Report what each returned so the failure is diagnosable
+  // (e.g. "all 503" = Google-wide spike; "429 on pro, no lite tried" = chain bug).
+  const summary = chain
+    .map(m => `${m.replace(/^gemini-/, '')}→${lastStatus.get(m) ?? 'skip'}`)
+    .join(', ');
+  const base = lastErr instanceof Error ? lastErr.message : 'Gemini request failed';
+  throw new Error(`${base}\n\nTried: ${summary}`);
 }
 
 // Turn a failed Gemini response into a human-readable message.

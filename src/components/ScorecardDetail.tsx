@@ -323,7 +323,7 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
                     </div>
                   )}
                   {readError && (
-                    <div className="text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded-lg text-left">
+                    <div className="text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded-lg text-left whitespace-pre-line">
                       {readError}
                     </div>
                   )}
@@ -453,7 +453,7 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
               )}
 
               {readError && (
-                <div className="text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded-lg">
+                <div className="text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded-lg whitespace-pre-line">
                   {readError}
                 </div>
               )}
