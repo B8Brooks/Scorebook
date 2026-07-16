@@ -47,15 +47,18 @@ function modelVersion(name: string): number {
   return m ? parseFloat(m[1]) : 0;
 }
 
-const EXCLUDED = /(preview|exp|thinking|tts|embedding|image|audio|live|lite)/;
+// Keep 'lite' available — it's a separate, high-availability capacity pool and
+// makes a great last-resort rung when the flagship Flash is overloaded (503).
+const EXCLUDED = /(preview|exp|thinking|tts|embedding|image|audio|live)/;
 
-// Ordered list of models to try. Free-tier keys have limit:0 on Pro, so 'best'
-// leads with Pro but falls through to Flash — a paid key gets Pro accuracy, a
-// free key silently lands on the Flash model it can actually call.
+// Ordered list of models to try, spanning distinct capacity pools so a spike on
+// one model (flagship Flash tends to be the busiest) falls through to another.
+// Free-tier keys 429 on Pro instantly, so the chain flows Pro -> Flash ->
+// Flash-lite -> older Flash; a paid key just succeeds on Pro up front.
 async function resolveModelChain(apiKey: string, tier: 'best' | 'fast'): Promise<string[]> {
   const fallback = tier === 'best'
-    ? ['gemini-2.5-pro', 'gemini-2.5-flash']
-    : ['gemini-2.5-flash', 'gemini-2.5-pro'];
+    ? ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash']
+    : ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.5-pro'];
 
   let models: GeminiModelInfo[];
   try {
@@ -71,20 +74,21 @@ async function resolveModelChain(apiKey: string, tier: 'best' | 'fast'): Promise
 
   if (usable.length === 0) return fallback;
 
-  const topOf = (keyword: string) =>
-    usable
-      .filter(n => n.includes(keyword))
-      .sort((a, b) => modelVersion(b) - modelVersion(a))[0];
+  const byVersion = (a: string, b: string) => modelVersion(b) - modelVersion(a);
+  const pro = usable.filter(n => n.includes('pro')).sort(byVersion);
+  const flashFull = usable.filter(n => n.includes('flash') && !n.includes('lite')).sort(byVersion);
+  const flashLite = usable.filter(n => n.includes('flash') && n.includes('lite')).sort(byVersion);
+  const rest = usable
+    .filter(n => !n.includes('pro') && !n.includes('flash'))
+    .sort(byVersion);
 
-  const pro = topOf('pro');
-  const flash = topOf('flash');
-  const ordered = tier === 'best' ? [pro, flash] : [flash, pro];
-  // Drop blanks, dedupe, and backfill with any remaining usable model.
-  const chain = [...new Set(ordered.filter(Boolean))] as string[];
-  if (chain.length === 0) {
-    chain.push(usable.sort((a, b) => modelVersion(b) - modelVersion(a))[0]);
-  }
-  return chain;
+  const topPro = pro.slice(0, 1);
+  const ordered = tier === 'best'
+    ? [...topPro, ...flashFull, ...flashLite, ...rest]
+    : [...flashFull, ...flashLite, ...topPro, ...rest];
+
+  const chain = [...new Set(ordered)];
+  return chain.length > 0 ? chain : fallback;
 }
 
 // POST a generateContent request to a specific model. Returns the parsed JSON
@@ -124,14 +128,14 @@ async function callGenerate(
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Statuses worth another attempt: quota (may be rate-limit, not a hard cap) and
-// transient server overloads. 404 also advances to the next model (that model
-// isn't available to this key). Everything else — 400 bad request, 403 bad key —
-// fails fast so the user sees the real problem.
-const RETRYABLE = new Set([429, 500, 503]);
+// Transient server overloads — worth waiting out and retrying the same model.
+const RETRYABLE = new Set([500, 503]);
 
-// Try each model in the chain; if the whole chain is exhausted by retryable
-// errors, wait out a brief spike and sweep the chain again before giving up.
+// Sweep the model chain; if every model is knocked out by a transient overload,
+// wait a beat and sweep again. A model that returns 429 (quota cap) or 404
+// (missing for this key) is permanently dead — dropped from later rounds so we
+// don't waste calls re-hitting free-tier Pro. 400/403 fail fast with the real
+// message.
 async function generateWithFallback(
   apiKey: string,
   chain: string[],
@@ -139,19 +143,26 @@ async function generateWithFallback(
   maxOutputTokens: number
 ): Promise<GenerateResponse> {
   const backoffs = [0, 2500, 5000]; // ms before each round
+  const dead = new Set<string>();
   let lastErr: unknown;
   for (let round = 0; round < backoffs.length; round++) {
     if (backoffs[round] > 0) await delay(backoffs[round]);
     for (const model of chain) {
+      if (dead.has(model)) continue;
       try {
         return await callGenerate(apiKey, model, parts, maxOutputTokens);
       } catch (err) {
         lastErr = err;
         const status = err instanceof GeminiHttpError ? err.status : 0;
-        if (status === 404 || RETRYABLE.has(status)) continue; // next model
+        if (status === 429 || status === 404) {
+          dead.add(model); // hard cap / missing — stop trying it
+          continue;
+        }
+        if (RETRYABLE.has(status)) continue; // transient — retry next round
         throw err; // non-retryable — surface immediately
       }
     }
+    if (dead.size >= chain.length) break; // nothing left worth retrying
   }
   throw lastErr;
 }
