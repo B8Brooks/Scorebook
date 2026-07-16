@@ -4,7 +4,22 @@ import { GameSelector } from './components/GameSelector';
 import { ScorecardGallery } from './components/ScorecardGallery';
 import { Settings } from './components/Settings';
 import { Scouting } from './components/Scouting';
-import { getScorecards, saveScorecard, deleteScorecard, updateScorecard, generateId, getGeminiApiKey } from './services/storage';
+import {
+  saveScorecard,
+  deleteScorecard,
+  updateScorecard,
+  generateId,
+  getGeminiApiKey,
+  setStorageUser,
+  subscribeScorecards,
+} from './services/storage';
+import {
+  isFirebaseConfigured,
+  onAuthChanged,
+  signInWithGoogle,
+  signOutUser,
+  type AuthUser,
+} from './services/firebase';
 import { compressImage } from './utils/imageUtils';
 import { detectGameInfo } from './services/ocr';
 import { analyzeScorecard } from './services/gemini';
@@ -22,9 +37,36 @@ function App() {
   const [detectedDate, setDetectedDate] = useState<string | null>(null);
   const [scanningImage, setScanningImage] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authReady, setAuthReady] = useState(!isFirebaseConfigured);
+  const [signInError, setSignInError] = useState<string | null>(null);
 
+  // Auth drives storage: signed in -> Firestore-backed store; out -> localStorage.
   useEffect(() => {
-    setScorecards(getScorecards());
+    const unsubAuth = onAuthChanged(u => {
+      setUser(u);
+      setStorageUser(u);
+      setAuthReady(true);
+    });
+    const unsubCards = subscribeScorecards(setScorecards);
+    return () => {
+      unsubAuth();
+      unsubCards();
+    };
+  }, []);
+
+  const handleSignIn = useCallback(async () => {
+    setSignInError(null);
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      setSignInError(err instanceof Error ? err.message : 'Sign-in failed. Please try again.');
+    }
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    await signOutUser();
+    setView('scout');
   }, []);
 
   const handleImageSelect = useCallback(async (imageUrl: string) => {
@@ -79,7 +121,6 @@ function App() {
       };
 
       saveScorecard(newScorecard);
-      setScorecards(getScorecards());
 
       // Reset form
       setUploadedImage(null);
@@ -102,13 +143,11 @@ function App() {
   const handleDelete = useCallback((id: string) => {
     if (confirm('Are you sure you want to delete this scorecard?')) {
       deleteScorecard(id);
-      setScorecards(getScorecards());
     }
   }, []);
 
   const handleUpdateScorecard = useCallback((id: string, updates: Partial<Scorecard>) => {
     updateScorecard(id, updates);
-    setScorecards(getScorecards());
   }, []);
 
   const handleCancel = useCallback(() => {
@@ -177,6 +216,42 @@ function App() {
               >
                 Scout
               </button>
+              {user ? (
+                <div className="flex items-center gap-2 pl-2 border-l border-gray-200">
+                  {user.photoURL ? (
+                    <img
+                      src={user.photoURL}
+                      alt={user.displayName ?? 'Account'}
+                      title={user.displayName ?? user.email ?? 'Signed in'}
+                      className="w-8 h-8 rounded-full border border-gray-200"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div
+                      className="w-8 h-8 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-sm font-bold"
+                      title={user.displayName ?? user.email ?? 'Signed in'}
+                    >
+                      {(user.displayName ?? user.email ?? '?').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <button
+                    onClick={handleSignOut}
+                    className="text-sm text-gray-500 hover:text-gray-700"
+                    title="Sign out"
+                  >
+                    Sign out
+                  </button>
+                </div>
+              ) : (
+                isFirebaseConfigured && (
+                  <button
+                    onClick={handleSignIn}
+                    className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-50"
+                  >
+                    Sign in
+                  </button>
+                )
+              )}
               <button
                 onClick={() => setShowSettings(true)}
                 className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
@@ -196,7 +271,44 @@ function App() {
       <main className="max-w-6xl mx-auto px-4 py-8">
         {view === 'scout' && <Scouting />}
 
-        {view === 'gallery' && (
+        {/* Scorecards require sign-in (when cloud sync is configured); the Scout
+            tab above stays public for friends checking the scouting report. */}
+        {view !== 'scout' && isFirebaseConfigured && !user && (
+          <div className="max-w-md mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center space-y-4">
+            {!authReady ? (
+              <div className="py-6">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+              </div>
+            ) : (
+              <>
+                <h2 className="text-xl font-bold text-gray-900">Sign in to your scorebook</h2>
+                <p className="text-sm text-gray-600">
+                  Your scorecards sync across devices with a Google account. Signing in on your
+                  phone or laptop brings up the same collection.
+                </p>
+                <button
+                  onClick={handleSignIn}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12.24 10.29v3.98h5.61c-.24 1.44-1.7 4.22-5.61 4.22-3.38 0-6.13-2.8-6.13-6.24s2.75-6.24 6.13-6.24c1.92 0 3.2.82 3.94 1.52l2.68-2.58C17.14 3.35 14.9 2.25 12.24 2.25c-5.42 0-9.8 4.38-9.8 9.8s4.38 9.8 9.8 9.8c5.65 0 9.4-3.97 9.4-9.56 0-.64-.07-1.13-.16-1.62l-9.24-.38z" />
+                  </svg>
+                  Sign in with Google
+                </button>
+                {signInError && (
+                  <div className="text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded-lg">
+                    {signInError}
+                  </div>
+                )}
+                <p className="text-xs text-gray-400">
+                  The Scout tab works without signing in.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
+        {view === 'gallery' && (!isFirebaseConfigured || user) && (
           <div>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-900">
@@ -210,7 +322,7 @@ function App() {
           </div>
         )}
 
-        {view === 'upload' && (
+        {view === 'upload' && (!isFirebaseConfigured || user) && (
           <div className="max-w-2xl mx-auto">
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               {/* Progress Steps */}
