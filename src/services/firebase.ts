@@ -24,15 +24,15 @@ import {
 } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: 'REPLACE_ME',
-  authDomain: 'REPLACE_ME.firebaseapp.com',
-  projectId: 'REPLACE_ME',
-  storageBucket: 'REPLACE_ME.firebasestorage.app',
-  messagingSenderId: 'REPLACE_ME',
-  appId: 'REPLACE_ME',
+  apiKey: 'AIzaSyAngGLL0OkEvhRcXvH1QRmgly5xwwaXQP8',
+  authDomain: 'scorebook-b00ec.firebaseapp.com',
+  projectId: 'scorebook-b00ec',
+  storageBucket: 'scorebook-b00ec.firebasestorage.app',
+  messagingSenderId: '796217450715',
+  appId: '1:796217450715:web:6f55e602414af7b9bfacfe',
 };
 
-export const isFirebaseConfigured = firebaseConfig.apiKey !== 'REPLACE_ME';
+export const isFirebaseConfigured = firebaseConfig.apiKey.length > 0;
 
 let app: FirebaseApp | null = null;
 let authInstance: Auth | null = null;
