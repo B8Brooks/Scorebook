@@ -38,6 +38,7 @@ interface BullpenEntry {
   name: string;
   role: string;
   mlbamid?: number;
+  tags?: string;
 }
 
 const ROLE_ORDER: Record<string, number> = {
@@ -45,6 +46,11 @@ const ROLE_ORDER: Record<string, number> = {
   Setup: 1,
   'Middle Relief': 2,
 };
+
+// Only rows with a recognizable bullpen role belong in the depth chart output.
+// FanGraphs also lists statuses like "Injured" or "Minors"; those must be
+// dropped, not defaulted into Middle Relief.
+const BULLPEN_ROLE = /(closer|setup|set-up|middle|long|reliev|8th|high lev)/i;
 
 function normalizeRole(raw: string): string {
   const r = raw.toLowerCase();
@@ -92,7 +98,8 @@ function parseTeamBullpen(
     const teamAbb = String(p.TeamAbbName ?? '').toUpperCase();
     if (!keySet.has(teamAbb)) return;
     const rawRole = String(p.Role ?? '');
-    if (!rawRole) return;
+    if (!rawRole || !BULLPEN_ROLE.test(rawRole)) return;
+    if (p.isActive === false || p.isActive === 0) return;
     const name = String(p.playerName ?? '');
     if (!name) return;
     const mlbamRaw = p.mlbamid;
@@ -102,7 +109,8 @@ function parseTeamBullpen(
         : Number.isFinite(parseInt(String(mlbamRaw), 10))
           ? parseInt(String(mlbamRaw), 10)
           : undefined;
-    entries.push({ name, role: normalizeRole(rawRole), mlbamid, order: i });
+    const tags = typeof p.Tags === 'string' && p.Tags.trim() ? p.Tags.trim() : undefined;
+    entries.push({ name, role: normalizeRole(rawRole), mlbamid, tags, order: i });
   });
 
   // Stable sort by role tier, preserving FanGraphs' within-tier order.
@@ -112,7 +120,7 @@ function parseTeamBullpen(
     return ra !== rb ? ra - rb : a.order - b.order;
   });
 
-  return entries.map(({ name, role, mlbamid }) => ({ name, role, mlbamid }));
+  return entries.map(({ name, role, mlbamid, tags }) => ({ name, role, mlbamid, tags }));
 }
 
 export default async function handler(req: Request): Promise<Response> {

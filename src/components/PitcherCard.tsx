@@ -10,6 +10,10 @@ interface PitcherCardProps {
   label?: string;
   mode?: PitcherCardMode;
   currentSeason: number;
+  /** FanGraphs editorial tag for this reliever, e.g. "On The Hot Seat". */
+  fgTag?: string;
+  /** True when this slot was filled by the stats ranking rather than FanGraphs. */
+  statsRanked?: boolean;
 }
 
 function HandChip({ hand }: { hand: 'L' | 'R' | 'S' }) {
@@ -139,14 +143,20 @@ function TextView({ report, role, currentSeason }: { report: PitcherScoutingRepo
   );
 }
 
-export function PitcherCard({ report, role, label, mode = 'full', currentSeason }: PitcherCardProps) {
+export function PitcherCard({ report, role, label, mode = 'full', currentSeason, fgTag, statsRanked }: PitcherCardProps) {
   const { bio, season, vsRHB, vsLHB, arsenal, seasonUsed } = report;
   const showFallbackBadge = seasonUsed !== currentSeason;
 
   if (mode === 'text') {
     return (
       <div className="pitcher-card border border-gray-300 rounded p-3 bg-white">
-        {label && <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">{label}</div>}
+        {label && (
+          <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">
+            {label}
+            {fgTag ? ` — ${fgTag}` : ''}
+            {statsRanked ? ' (stats-ranked)' : ''}
+          </div>
+        )}
         <TextView report={report} role={role} currentSeason={currentSeason} />
       </div>
     );
@@ -156,12 +166,25 @@ export function PitcherCard({ report, role, label, mode = 'full', currentSeason 
   const cardPadding = compact ? 'p-3' : 'p-4 sm:p-5';
   const shadow = compact ? '' : 'shadow-sm';
   const borderColor = compact ? 'border-gray-300' : 'border-gray-200';
+  const chipText = compact ? 'text-[9px] px-1 py-0.5' : 'text-[10px] px-1.5 py-0.5';
 
   return (
     <div className={`pitcher-card bg-white rounded-lg border ${borderColor} ${shadow} ${cardPadding} flex flex-col`}>
       {label && (
-        <div className={`${compact ? 'text-[10px]' : 'text-xs'} font-semibold text-green-700 uppercase tracking-wide mb-1`}>
-          {label}
+        <div className={`flex items-center gap-1.5 flex-wrap mb-1`}>
+          <span className={`${compact ? 'text-[10px]' : 'text-xs'} font-semibold text-green-700 uppercase tracking-wide`}>
+            {label}
+          </span>
+          {fgTag && (
+            <span className={`inline-flex items-center ${chipText} font-semibold rounded bg-amber-100 text-amber-800 border border-amber-200`}>
+              {fgTag}
+            </span>
+          )}
+          {statsRanked && (
+            <span className={`inline-flex items-center ${chipText} font-semibold rounded bg-gray-100 text-gray-600 border border-gray-200`}>
+              stats-ranked
+            </span>
+          )}
         </div>
       )}
       <div className="flex items-start justify-between gap-2">

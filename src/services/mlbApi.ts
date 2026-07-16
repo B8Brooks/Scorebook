@@ -459,7 +459,7 @@ function normalizePlayerName(name: string): string {
 
 async function fetchFangraphsBullpen(
   teamId: number
-): Promise<Array<{ name: string; role: string; mlbamid?: number }> | null> {
+): Promise<Array<{ name: string; role: string; mlbamid?: number; tags?: string }> | null> {
   try {
     const res = await fetch(`/api/fangraphs-bullpen?team=${teamId}`);
     if (!res.ok) return null;
@@ -559,7 +559,14 @@ export async function getTeamRelievers(
         pitchersByName.get(normalizePlayerName(entry.name));
       if (mlb && !seen.has(mlb.id)) {
         seen.add(mlb.id);
-        matched.push({ id: mlb.id, name: mlb.name, score, role: entry.role });
+        matched.push({
+          id: mlb.id,
+          name: mlb.name,
+          score,
+          role: entry.role,
+          tags: entry.tags,
+          source: 'fangraphs',
+        });
         score -= 1;
       }
       if (matched.length >= 6) break;
@@ -571,7 +578,7 @@ export async function getTeamRelievers(
     if (matched.length >= 6) break;
     if (seen.has(c.id)) continue;
     seen.add(c.id);
-    matched.push({ id: c.id, name: c.name, score: 0 });
+    matched.push({ id: c.id, name: c.name, score: 0, source: 'stats' });
   }
 
   return matched.slice(0, 6);
@@ -654,24 +661,32 @@ function parseSplit(split: any, vs: 'RHB' | 'LHB'): HandednessSplit | null {
 
 function parseArsenal(splits: any[]): PitchArsenalItem[] {
   if (!splits) return [];
-  return splits
-    .map(s => {
-      const stat = s?.stat ?? {};
-      const pt = stat.type ?? stat.pitchType ?? {};
-      const rawUsage = parseFloatSafe(
-        stat.percentage ?? stat.percentOccurrence ?? stat.percent
-      );
-      const usagePct = rawUsage > 1 ? rawUsage : rawUsage * 100;
-      return {
-        pitchType: pt.code ?? pt.abbreviation ?? '??',
-        pitchName: pt.description ?? pt.displayName ?? 'Unknown',
-        usagePct,
-        avgVelo: stat.averageSpeed != null ? parseFloatSafe(stat.averageSpeed) : undefined,
-        avgSpin: stat.averageSpinRate != null ? parseFloatSafe(stat.averageSpinRate) : undefined,
-      };
-    })
+  const raw = splits.map(s => {
+    const stat = s?.stat ?? {};
+    const pt = stat.type ?? stat.pitchType ?? {};
+    return {
+      pitchType: pt.code ?? pt.abbreviation ?? '??',
+      pitchName: pt.description ?? pt.displayName ?? 'Unknown',
+      rawUsage: parseFloatSafe(stat.percentage ?? stat.percentOccurrence ?? stat.percent),
+      avgVelo: stat.averageSpeed != null ? parseFloatSafe(stat.averageSpeed) : undefined,
+      avgSpin: stat.averageSpinRate != null ? parseFloatSafe(stat.averageSpinRate) : undefined,
+    };
+  });
+
+  // Decide fraction-vs-percent once for the whole set: fractions sum to ~1,
+  // percents to ~100. A per-pitch check would misread a percent-format 0.9%
+  // pitch as a fraction and blow it up to 90%.
+  const sum = raw.reduce((acc, p) => acc + p.rawUsage, 0);
+  const scale = sum <= 1.5 ? 100 : 1;
+
+  const items = raw
+    .map(({ rawUsage, ...rest }) => ({ ...rest, usagePct: rawUsage * scale }))
     .filter(a => a.usagePct > 0)
     .sort((a, b) => b.usagePct - a.usagePct);
+
+  // Hide data-noise pitches under 2% usage, but never empty the arsenal.
+  const filtered = items.filter(a => a.usagePct >= 2);
+  return filtered.length > 0 ? filtered : items.slice(0, 1);
 }
 
 async function fetchSplits(

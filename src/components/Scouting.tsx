@@ -21,8 +21,14 @@ import { LineupSection } from './LineupSection';
 
 const RED_SOX_ID = 111;
 
-// A scouting report plus the depth-chart role (Closer/Setup/Middle Relief) it was ranked at.
-type BullpenReport = PitcherScoutingReport & { depthRole?: string };
+// A scouting report plus the depth-chart role (Closer/Setup/Middle Relief) it was
+// ranked at, the FanGraphs editorial tag (e.g. "On The Hot Seat"), and whether it
+// came from FanGraphs or the stats-ranking top-up.
+type BullpenReport = PitcherScoutingReport & {
+  depthRole?: string;
+  depthTags?: string;
+  depthSource?: 'fangraphs' | 'stats';
+};
 
 function todayIso(): string {
   return new Date().toISOString().split('T')[0];
@@ -114,7 +120,7 @@ export function Scouting() {
           const reports = await Promise.all(
             rankings.map(async (r): Promise<BullpenReport> => {
               const report = await getPitcherScoutingReport(r.id, currentSeason);
-              return { ...report, depthRole: r.role };
+              return { ...report, depthRole: r.role, depthTags: r.tags, depthSource: r.source };
             })
           );
           setter(reports);
@@ -384,6 +390,11 @@ function TeamPage({
   opposingStarterHand,
 }: TeamPageProps) {
   const teamName = team === 'opponent' ? opponentName : selectedName;
+  // Only badge stats-ranked arms when the list mixes sources — if FanGraphs
+  // failed entirely, six identical badges would just be noise.
+  const bullpenIsMixed =
+    bullpen.some(r => r.depthSource === 'fangraphs') &&
+    bullpen.some(r => r.depthSource === 'stats');
   const sectionLabel = team === 'opponent' ? 'Opponent' : 'Your Team';
   const probableSide = starterSide === 'home' ? probable.home : probable.away;
   const probableName = probableSide.probablePitcherName;
@@ -451,6 +462,8 @@ function TeamPage({
                 report={r}
                 role="Reliever"
                 label={r.depthRole ?? bullpenLabel(i)}
+                fgTag={r.depthTags}
+                statsRanked={bullpenIsMixed && r.depthSource === 'stats'}
                 mode={mode}
                 currentSeason={currentSeason}
               />

@@ -238,4 +238,6 @@ export interface RelieverRanking {
   name: string;
   score: number;
   role?: string;
+  tags?: string;
+  source?: 'fangraphs' | 'stats';
 }

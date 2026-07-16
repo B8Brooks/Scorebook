@@ -35,13 +35,16 @@ export function PitchArsenalBar({ arsenal, compact = false }: PitchArsenalProps)
 
   // Layout constants — scaled for compact vs full.
   const W = compact ? 260 : 320;
-  const H = compact ? 22 * arsenal.length + 10 : 26 * arsenal.length + 14;
+  const r = compact ? 40 : 50;
+  const rowHeight = compact ? 22 : 26;
+  const legendHeight = rowHeight * arsenal.length + (compact ? 10 : 14);
+  // The viewBox must fit whichever is taller: the legend rows or the pie itself.
+  // Legend-only sizing clipped the pie for 2-3 pitch arsenals (most relievers).
+  const H = Math.max(legendHeight, 2 * r + 8);
   const cx = compact ? 50 : 60;
   const cy = H / 2;
-  const r = compact ? 40 : 50;
   const legendX = compact ? 120 : 140;
   const lineEndX = legendX - 8;
-  const rowHeight = compact ? 22 : 26;
   const legendTop = (H - rowHeight * arsenal.length) / 2 + rowHeight / 2;
   const codeFont = compact ? 9 : 11;
   const nameFont = compact ? 9 : 10;
@@ -55,6 +58,9 @@ export function PitchArsenalBar({ arsenal, compact = false }: PitchArsenalProps)
     cursor += sweep;
     const mid = (startAngle + endAngle) / 2;
     const outer = polarToCartesian(cx, cy, r, mid);
+    // Elbow point slightly beyond the pie edge so lines leave radially
+    // before turning toward the legend, which keeps them from crossing.
+    const elbow = polarToCartesian(cx, cy, r + 6, mid);
     const legendY = legendTop + i * rowHeight;
     return {
       pitch,
@@ -62,6 +68,7 @@ export function PitchArsenalBar({ arsenal, compact = false }: PitchArsenalProps)
       endAngle,
       color: pitchColor(pitch.pitchType),
       outer,
+      elbow,
       legendY,
     };
   });
@@ -90,7 +97,7 @@ export function PitchArsenalBar({ arsenal, compact = false }: PitchArsenalProps)
       {slices.map(slice => (
         <polyline
           key={`line-${slice.pitch.pitchType}`}
-          points={`${slice.outer.x},${slice.outer.y} ${lineEndX - 4},${slice.legendY} ${lineEndX},${slice.legendY}`}
+          points={`${slice.outer.x},${slice.outer.y} ${slice.elbow.x},${slice.elbow.y} ${lineEndX - 4},${slice.legendY} ${lineEndX},${slice.legendY}`}
           fill="none"
           stroke="#6b7280"
           strokeWidth="0.6"
