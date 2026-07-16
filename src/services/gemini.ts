@@ -49,8 +49,14 @@ function modelVersion(name: string): number {
 
 const EXCLUDED = /(preview|exp|thinking|tts|embedding|image|audio|live|lite)/;
 
-async function resolveGeminiModel(apiKey: string, tier: 'best' | 'fast'): Promise<string> {
-  const fallback = tier === 'best' ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
+// Ordered list of models to try. Free-tier keys have limit:0 on Pro, so 'best'
+// leads with Pro but falls through to Flash — a paid key gets Pro accuracy, a
+// free key silently lands on the Flash model it can actually call.
+async function resolveModelChain(apiKey: string, tier: 'best' | 'fast'): Promise<string[]> {
+  const fallback = tier === 'best'
+    ? ['gemini-2.5-pro', 'gemini-2.5-flash']
+    : ['gemini-2.5-flash', 'gemini-2.5-pro'];
+
   let models: GeminiModelInfo[];
   try {
     models = await listModels(apiKey);
@@ -65,15 +71,78 @@ async function resolveGeminiModel(apiKey: string, tier: 'best' | 'fast'): Promis
 
   if (usable.length === 0) return fallback;
 
-  const byTierThenVersion = (keyword: string) =>
+  const topOf = (keyword: string) =>
     usable
       .filter(n => n.includes(keyword))
       .sort((a, b) => modelVersion(b) - modelVersion(a))[0];
 
-  const pro = byTierThenVersion('pro');
-  const flash = byTierThenVersion('flash');
-  const preferred = tier === 'best' ? (pro ?? flash) : (flash ?? pro);
-  return preferred ?? usable.sort((a, b) => modelVersion(b) - modelVersion(a))[0] ?? fallback;
+  const pro = topOf('pro');
+  const flash = topOf('flash');
+  const ordered = tier === 'best' ? [pro, flash] : [flash, pro];
+  // Drop blanks, dedupe, and backfill with any remaining usable model.
+  const chain = [...new Set(ordered.filter(Boolean))] as string[];
+  if (chain.length === 0) {
+    chain.push(usable.sort((a, b) => modelVersion(b) - modelVersion(a))[0]);
+  }
+  return chain;
+}
+
+// POST a generateContent request to a specific model. Returns the parsed JSON
+// body, or throws a GeminiHttpError carrying the status so callers can decide
+// whether to fall back to another model.
+class GeminiHttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+interface GenerateResponse {
+  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+}
+
+async function callGenerate(
+  apiKey: string,
+  model: string,
+  parts: unknown[],
+  maxOutputTokens: number
+): Promise<GenerateResponse> {
+  const response = await fetch(`${GEMINI_API_BASE}/models/${model}:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts }],
+      generationConfig: { temperature: 0.1, maxOutputTokens },
+    }),
+  });
+  if (!response.ok) {
+    throw new GeminiHttpError(response.status, await readGeminiError(response));
+  }
+  return response.json();
+}
+
+// Try each model in the chain; fall back only when the current model is
+// unavailable to this key (429 quota / 404 not found), otherwise surface the
+// error immediately (bad request, bad key, etc.).
+async function generateWithFallback(
+  apiKey: string,
+  chain: string[],
+  parts: unknown[],
+  maxOutputTokens: number
+): Promise<GenerateResponse> {
+  let lastErr: unknown;
+  for (const model of chain) {
+    try {
+      return await callGenerate(apiKey, model, parts, maxOutputTokens);
+    } catch (err) {
+      lastErr = err;
+      const status = err instanceof GeminiHttpError ? err.status : 0;
+      if (status === 429 || status === 404) continue; // try next model
+      throw err;
+    }
+  }
+  throw lastErr;
 }
 
 // Turn a failed Gemini response into a human-readable message.
@@ -114,38 +183,16 @@ Respond in this exact JSON format only, no other text:
 If the date is in MM/DD/YY format like "6/13/25", convert it to "2025-06-13".
 If you can't find a field, use null.`;
 
-  const model = await resolveGeminiModel(apiKey, 'fast');
-  const response = await fetch(`${GEMINI_API_BASE}/models/${model}:generateContent?key=${apiKey}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [
-            { text: prompt },
-            {
-              inline_data: {
-                mime_type: 'image/jpeg',
-                data: base64Data,
-              },
-            },
-          ],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.1,
-        maxOutputTokens: 256,
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(await readGeminiError(response));
-  }
-
-  const data = await response.json();
+  const chain = await resolveModelChain(apiKey, 'fast');
+  const data = await generateWithFallback(
+    apiKey,
+    chain,
+    [
+      { text: prompt },
+      { inline_data: { mime_type: 'image/jpeg', data: base64Data } },
+    ],
+    256
+  );
 
   // Extract the text response
   const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -334,31 +381,10 @@ Important:
     },
   });
 
-  // Handwriting is hard — use the strongest available model for the full read.
-  const model = await resolveGeminiModel(apiKey, 'best');
-  const response = await fetch(`${GEMINI_API_BASE}/models/${model}:generateContent?key=${apiKey}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: parts,
-        },
-      ],
-      generationConfig: {
-        temperature: 0.1,
-        maxOutputTokens: 8192,
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(await readGeminiError(response));
-  }
-
-  const data = await response.json();
+  // Handwriting is hard — prefer the strongest model, but fall back to Flash if
+  // the key can't call Pro (free tier has limit:0 on Pro → 429).
+  const chain = await resolveModelChain(apiKey, 'best');
+  const data = await generateWithFallback(apiKey, chain, parts, 8192);
   const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
   if (!textResponse) {
