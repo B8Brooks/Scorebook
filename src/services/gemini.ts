@@ -12,7 +12,82 @@ export interface GeminiResponse {
   rawText?: string;
 }
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+
+// ---------- Dynamic model resolution ----------
+// Models get retired (the original hardcoded gemini-2.0-flash 404s now), so we
+// discover what's available and pick by tier: 'best' favors the strongest Pro
+// model for reading handwriting; 'fast' favors Flash for the cheap date pre-scan.
+// Version-aware ranking means new Gemini generations are adopted automatically.
+
+interface GeminiModelInfo {
+  name: string; // e.g. "models/gemini-2.5-pro"
+  supportedGenerationMethods?: string[];
+}
+
+let modelsPromise: Promise<GeminiModelInfo[]> | null = null;
+
+function listModels(apiKey: string): Promise<GeminiModelInfo[]> {
+  if (!modelsPromise) {
+    modelsPromise = (async () => {
+      const res = await fetch(`${GEMINI_API_BASE}/models?key=${apiKey}&pageSize=100`);
+      if (!res.ok) {
+        modelsPromise = null; // allow retry on next call
+        throw new Error(await readGeminiError(res));
+      }
+      const data = await res.json();
+      return Array.isArray(data?.models) ? data.models : [];
+    })();
+  }
+  return modelsPromise;
+}
+
+function modelVersion(name: string): number {
+  const m = name.match(/gemini-(\d+(?:\.\d+)?)/);
+  return m ? parseFloat(m[1]) : 0;
+}
+
+const EXCLUDED = /(preview|exp|thinking|tts|embedding|image|audio|live|lite)/;
+
+async function resolveGeminiModel(apiKey: string, tier: 'best' | 'fast'): Promise<string> {
+  const fallback = tier === 'best' ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
+  let models: GeminiModelInfo[];
+  try {
+    models = await listModels(apiKey);
+  } catch {
+    return fallback;
+  }
+
+  const usable = models
+    .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+    .map(m => m.name.replace(/^models\//, ''))
+    .filter(n => n.startsWith('gemini-') && !EXCLUDED.test(n));
+
+  if (usable.length === 0) return fallback;
+
+  const byTierThenVersion = (keyword: string) =>
+    usable
+      .filter(n => n.includes(keyword))
+      .sort((a, b) => modelVersion(b) - modelVersion(a))[0];
+
+  const pro = byTierThenVersion('pro');
+  const flash = byTierThenVersion('flash');
+  const preferred = tier === 'best' ? (pro ?? flash) : (flash ?? pro);
+  return preferred ?? usable.sort((a, b) => modelVersion(b) - modelVersion(a))[0] ?? fallback;
+}
+
+// Turn a failed Gemini response into a human-readable message.
+async function readGeminiError(res: Response): Promise<string> {
+  let detail = '';
+  try {
+    const body = await res.json();
+    detail = body?.error?.message ?? '';
+  } catch {
+    /* non-JSON body */
+  }
+  console.error('Gemini API error:', res.status, detail);
+  return `Gemini error ${res.status}${detail ? `: ${detail}` : ''}`;
+}
 
 export async function analyzeScorecard(
   imageBase64: string,
@@ -39,7 +114,8 @@ Respond in this exact JSON format only, no other text:
 If the date is in MM/DD/YY format like "6/13/25", convert it to "2025-06-13".
 If you can't find a field, use null.`;
 
-  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+  const model = await resolveGeminiModel(apiKey, 'fast');
+  const response = await fetch(`${GEMINI_API_BASE}/models/${model}:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -66,9 +142,7 @@ If you can't find a field, use null.`;
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    console.error('Gemini API error:', error);
-    throw new Error(`Gemini API error: ${response.status}`);
+    throw new Error(await readGeminiError(response));
   }
 
   const data = await response.json();
@@ -107,13 +181,12 @@ If you can't find a field, use null.`;
   };
 }
 
-// Test if the API key is valid
+// Test if the API key is valid. Listing models both validates the key and
+// warms the model-resolution cache.
 export async function testApiKey(apiKey: string): Promise<boolean> {
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash?key=${apiKey}`
-    );
-    return response.ok;
+    await listModels(apiKey);
+    return true;
   } catch {
     return false;
   }
@@ -261,7 +334,9 @@ Important:
     },
   });
 
-  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+  // Handwriting is hard — use the strongest available model for the full read.
+  const model = await resolveGeminiModel(apiKey, 'best');
+  const response = await fetch(`${GEMINI_API_BASE}/models/${model}:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -274,15 +349,13 @@ Important:
       ],
       generationConfig: {
         temperature: 0.1,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 8192,
       },
     }),
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    console.error('Gemini API error:', error);
-    throw new Error(`Gemini API error: ${response.status}`);
+    throw new Error(await readGeminiError(response));
   }
 
   const data = await response.json();

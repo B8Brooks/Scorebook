@@ -39,6 +39,7 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
   const [playByPlay, setPlayByPlay] = useState<PlayByPlay | null>(null);
   const [pbpLoading, setPbpLoading] = useState(false);
   const [pbpError, setPbpError] = useState<string | null>(null);
+  const [readError, setReadError] = useState<string | null>(null);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -102,6 +103,7 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
 
     if (useGemini && apiKey) {
       // Use Gemini for interpretation
+      setReadError(null);
       setOcrProgress({ status: 'Analyzing with Gemini AI', progress: 0.5 });
       try {
         const result = await interpretScorecard(scorecard.imageUrl, apiKey);
@@ -111,7 +113,7 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
         setOcrProgress(null);
       } catch (error) {
         console.error('Gemini interpretation failed:', error);
-        alert('Gemini analysis failed. Try again or switch to basic OCR.');
+        setReadError(error instanceof Error ? error.message : 'Gemini analysis failed. Please try again.');
       } finally {
         setIsProcessing(false);
         setOcrProgress(null);
@@ -320,6 +322,11 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
                       {ocrProgress.status}...
                     </div>
                   )}
+                  {readError && (
+                    <div className="text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded-lg text-left">
+                      {readError}
+                    </div>
+                  )}
                 </div>
               ) : pbpLoading ? (
                 <div className="text-center py-10">
@@ -443,6 +450,12 @@ export function ScorecardDetail({ scorecard, onClose, onUpdate }: ScorecardDetai
                 >
                   {hasGeminiKey && useGemini ? 'Read Scorecard with AI' : 'Try Basic OCR'}
                 </button>
+              )}
+
+              {readError && (
+                <div className="text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded-lg">
+                  {readError}
+                </div>
               )}
 
               {isProcessing && ocrProgress && (
