@@ -122,24 +122,35 @@ async function callGenerate(
   return response.json();
 }
 
-// Try each model in the chain; fall back only when the current model is
-// unavailable to this key (429 quota / 404 not found), otherwise surface the
-// error immediately (bad request, bad key, etc.).
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Statuses worth another attempt: quota (may be rate-limit, not a hard cap) and
+// transient server overloads. 404 also advances to the next model (that model
+// isn't available to this key). Everything else — 400 bad request, 403 bad key —
+// fails fast so the user sees the real problem.
+const RETRYABLE = new Set([429, 500, 503]);
+
+// Try each model in the chain; if the whole chain is exhausted by retryable
+// errors, wait out a brief spike and sweep the chain again before giving up.
 async function generateWithFallback(
   apiKey: string,
   chain: string[],
   parts: unknown[],
   maxOutputTokens: number
 ): Promise<GenerateResponse> {
+  const backoffs = [0, 2500, 5000]; // ms before each round
   let lastErr: unknown;
-  for (const model of chain) {
-    try {
-      return await callGenerate(apiKey, model, parts, maxOutputTokens);
-    } catch (err) {
-      lastErr = err;
-      const status = err instanceof GeminiHttpError ? err.status : 0;
-      if (status === 429 || status === 404) continue; // try next model
-      throw err;
+  for (let round = 0; round < backoffs.length; round++) {
+    if (backoffs[round] > 0) await delay(backoffs[round]);
+    for (const model of chain) {
+      try {
+        return await callGenerate(apiKey, model, parts, maxOutputTokens);
+      } catch (err) {
+        lastErr = err;
+        const status = err instanceof GeminiHttpError ? err.status : 0;
+        if (status === 404 || RETRYABLE.has(status)) continue; // next model
+        throw err; // non-retryable — surface immediately
+      }
     }
   }
   throw lastErr;
