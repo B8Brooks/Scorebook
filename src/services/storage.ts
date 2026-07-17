@@ -47,6 +47,43 @@ let trainingCache: TrainingExample[] = [];
 let unsubscribers: Array<() => void> = [];
 const scorecardListeners = new Set<(cards: Scorecard[]) => void>();
 
+// Visible sync state so failures aren't buried in the console. cloudCards is
+// null until the first snapshot arrives (lets the UI show a loading state).
+export interface SyncStatus {
+  signedIn: boolean;
+  email: string | null;
+  cloudCards: number | null;
+  migrating: boolean;
+  lastError: string | null;
+}
+
+let syncStatus: SyncStatus = {
+  signedIn: false,
+  email: null,
+  cloudCards: null,
+  migrating: false,
+  lastError: null,
+};
+const syncListeners = new Set<(status: SyncStatus) => void>();
+
+function updateSyncStatus(patch: Partial<SyncStatus>): void {
+  syncStatus = { ...syncStatus, ...patch };
+  for (const cb of syncListeners) cb(syncStatus);
+}
+
+export function subscribeSyncStatus(cb: (status: SyncStatus) => void): () => void {
+  syncListeners.add(cb);
+  cb(syncStatus);
+  return () => {
+    syncListeners.delete(cb);
+  };
+}
+
+function describeError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
 function notifyScorecardListeners(): void {
   const cards = getScorecards();
   for (const cb of scorecardListeners) cb(cards);
@@ -58,7 +95,10 @@ function sanitize<T>(value: T): T {
 }
 
 function logWriteError(context: string) {
-  return (err: unknown) => console.error(`Firestore write failed (${context}):`, err);
+  return (err: unknown) => {
+    console.error(`Firestore write failed (${context}):`, err);
+    updateSyncStatus({ lastError: `${context}: ${describeError(err)}` });
+  };
 }
 
 // ---------- localStorage primitives (signed-out fallback + migration source) ----------
@@ -88,6 +128,13 @@ export function setStorageUser(user: AuthUser | null): void {
   scorecardsCache = [];
   settingsCache = {};
   trainingCache = [];
+  updateSyncStatus({
+    signedIn: !!uid,
+    email: user?.email ?? null,
+    cloudCards: null,
+    migrating: false,
+    lastError: null,
+  });
 
   if (!uid || !isFirebaseConfigured) {
     notifyScorecardListeners(); // fall back to localStorage view
@@ -98,37 +145,55 @@ export function setStorageUser(user: AuthUser | null): void {
   const userId = uid;
 
   void migrateLocalToCloud(userId).finally(() => {
+    if (uid !== userId) return;
     unsubscribers.push(
-      onSnapshot(collection(db, 'users', userId, 'scorecards'), snap => {
-        if (uid !== userId) return;
-        scorecardsCache = snap.docs
-          .map(d => d.data() as Scorecard)
-          .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
-        notifyScorecardListeners();
-      }),
-      onSnapshot(doc(db, 'users', userId, 'settings', 'app'), snap => {
-        if (uid !== userId) return;
-        settingsCache = (snap.data() as AppSettings) ?? {};
-      }),
-      onSnapshot(collection(db, 'users', userId, 'training'), snap => {
-        if (uid !== userId) return;
-        trainingCache = snap.docs
-          .map(d => d.data() as TrainingExample)
-          .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
-      })
+      onSnapshot(
+        collection(db, 'users', userId, 'scorecards'),
+        snap => {
+          if (uid !== userId) return;
+          scorecardsCache = snap.docs
+            .map(d => d.data() as Scorecard)
+            .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+          updateSyncStatus({ cloudCards: scorecardsCache.length });
+          notifyScorecardListeners();
+        },
+        err => updateSyncStatus({ lastError: `scorecards sync: ${describeError(err)}` })
+      ),
+      onSnapshot(
+        doc(db, 'users', userId, 'settings', 'app'),
+        snap => {
+          if (uid !== userId) return;
+          settingsCache = (snap.data() as AppSettings) ?? {};
+        },
+        err => updateSyncStatus({ lastError: `settings sync: ${describeError(err)}` })
+      ),
+      onSnapshot(
+        collection(db, 'users', userId, 'training'),
+        snap => {
+          if (uid !== userId) return;
+          trainingCache = snap.docs
+            .map(d => d.data() as TrainingExample)
+            .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+        },
+        err => updateSyncStatus({ lastError: `training sync: ${describeError(err)}` })
+      )
     );
   });
 }
 
+// Each piece migrates independently and idempotently (stable doc ids), so a
+// missing API key can't be caused by the scorecards branch being skipped.
 async function migrateLocalToCloud(userId: string): Promise<void> {
   const flagKey = `${MIGRATED_KEY_PREFIX}${userId}`;
   if (localStorage.getItem(flagKey)) return;
 
+  updateSyncStatus({ migrating: true });
   try {
     const db = getDb();
+
+    // Scorecards: only when the cloud is empty (never clobber cloud data).
     const existing = await getDocs(collection(db, 'users', userId, 'scorecards'));
     const locals = localScorecards();
-
     if (existing.empty && locals.length > 0) {
       for (const card of locals) {
         const imageUrl = await compressToLimit(card.imageUrl);
@@ -137,19 +202,35 @@ async function migrateLocalToCloud(userId: string): Promise<void> {
           sanitize({ ...card, imageUrl })
         );
       }
-      // Also migrate settings + training examples if the cloud has none.
-      const localSettings = readLocal<AppSettings>(SETTINGS_KEY, {});
-      if (localSettings.geminiApiKey) {
+    }
+
+    // Settings: migrate whenever the cloud doc is missing and a local key exists.
+    const localSettings = readLocal<AppSettings>(SETTINGS_KEY, {});
+    if (localSettings.geminiApiKey) {
+      const cloudSettings = await getDocs(collection(db, 'users', userId, 'settings'));
+      if (cloudSettings.empty) {
         await setDoc(doc(db, 'users', userId, 'settings', 'app'), sanitize(localSettings));
       }
-      for (const ex of readLocal<TrainingExample[]>(TRAINING_EXAMPLES_KEY, [])) {
-        const imageUrl = await compressToLimit(ex.imageUrl);
-        await setDoc(doc(db, 'users', userId, 'training', ex.id), sanitize({ ...ex, imageUrl }));
+    }
+
+    // Training examples: same independent treatment.
+    const localTraining = readLocal<TrainingExample[]>(TRAINING_EXAMPLES_KEY, []);
+    if (localTraining.length > 0) {
+      const cloudTraining = await getDocs(collection(db, 'users', userId, 'training'));
+      if (cloudTraining.empty) {
+        for (const ex of localTraining) {
+          const imageUrl = await compressToLimit(ex.imageUrl);
+          await setDoc(doc(db, 'users', userId, 'training', ex.id), sanitize({ ...ex, imageUrl }));
+        }
       }
     }
+
     localStorage.setItem(flagKey, '1');
   } catch (err) {
     console.error('Migration to cloud failed (will retry next sign-in):', err);
+    updateSyncStatus({ lastError: `migration: ${describeError(err)}` });
+  } finally {
+    updateSyncStatus({ migrating: false });
   }
 }
 

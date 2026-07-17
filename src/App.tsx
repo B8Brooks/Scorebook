@@ -12,6 +12,8 @@ import {
   getGeminiApiKey,
   setStorageUser,
   subscribeScorecards,
+  subscribeSyncStatus,
+  type SyncStatus,
 } from './services/storage';
 import {
   isFirebaseConfigured,
@@ -40,6 +42,7 @@ function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authReady, setAuthReady] = useState(!isFirebaseConfigured);
   const [signInError, setSignInError] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
 
   // Auth drives storage: signed in -> Firestore-backed store; out -> localStorage.
   useEffect(() => {
@@ -49,9 +52,11 @@ function App() {
       setAuthReady(true);
     });
     const unsubCards = subscribeScorecards(setScorecards);
+    const unsubSync = subscribeSyncStatus(setSyncStatus);
     return () => {
       unsubAuth();
       unsubCards();
+      unsubSync();
     };
   }, []);
 
@@ -310,7 +315,7 @@ function App() {
 
         {view === 'gallery' && (!isFirebaseConfigured || user) && (
           <div>
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-2">
               <h2 className="text-2xl font-bold text-gray-900">
                 My Scorecards
               </h2>
@@ -318,7 +323,36 @@ function App() {
                 {scorecards.length} {scorecards.length === 1 ? 'card' : 'cards'}
               </span>
             </div>
-            <ScorecardGallery scorecards={scorecards} onDelete={handleDelete} onUpdate={handleUpdateScorecard} />
+
+            {/* Sync status: distinguishes wrong-account, permission errors, and
+                empty-cloud at a glance. */}
+            {user && syncStatus?.signedIn && (
+              <div className="mb-4 text-xs">
+                {syncStatus.lastError ? (
+                  <span className="inline-block text-red-700 bg-red-50 border border-red-200 px-2 py-1 rounded">
+                    Sync problem ({syncStatus.email}): {syncStatus.lastError}
+                  </span>
+                ) : syncStatus.migrating ? (
+                  <span className="inline-block text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1 rounded">
+                    Migrating your scorecards to the cloud…
+                  </span>
+                ) : (
+                  <span className="text-gray-400">
+                    Synced as {syncStatus.email}
+                    {syncStatus.cloudCards != null ? ` · ${syncStatus.cloudCards} in cloud` : ''}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {user && syncStatus?.cloudCards == null && !syncStatus?.lastError ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-3"></div>
+                <p className="text-sm text-gray-500">Loading your scorecards…</p>
+              </div>
+            ) : (
+              <ScorecardGallery scorecards={scorecards} onDelete={handleDelete} onUpdate={handleUpdateScorecard} />
+            )}
           </div>
         )}
 
