@@ -305,4 +305,5 @@ export interface RelieverRanking {
   saves?: number;
   holds?: number;
   recent?: Array<{ date: string; pitches?: number }>;
+  arsenal?: PitchArsenalItem[];
 }

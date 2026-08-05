@@ -11,6 +11,7 @@ import {
   getProbablePitchers,
   getTeamRelievers,
   getPitcherScoutingReport,
+  getPitcherArsenal,
   getGameLineups,
   getBatterInfo,
   getLeagueHittingAverage,
@@ -131,9 +132,15 @@ export function Scouting() {
         try {
           const rankings = await getTeamRelievers(targetTeamId, currentSeason);
           // Full scouting reports only for the high-leverage arms; the rest of
-          // the pen renders straight from the ranking line (no extra fetches).
+          // the pen gets a light parallel arsenal fetch for the mix column.
           const cardRankings = rankings.slice(0, FULL_CARD_COUNT);
-          setRest(rankings.slice(FULL_CARD_COUNT));
+          const restRankings = rankings.slice(FULL_CARD_COUNT);
+          void Promise.all(
+            restRankings.map(async r => ({
+              ...r,
+              arsenal: await getPitcherArsenal(r.id, currentSeason).catch(() => []),
+            }))
+          ).then(setRest);
           const reports = await Promise.all(
             cardRankings.map(async (r): Promise<BullpenReport> => {
               const report = await getPitcherScoutingReport(r.id, currentSeason);
@@ -497,6 +504,7 @@ function TeamPage({
                 fgTag={r.depthTags}
                 statsRanked={bullpenIsMixed && r.depthSource === 'stats'}
                 availability={availabilityFor(scoutDate, r.depthRecent)}
+                compactArsenal
                 mode={mode}
                 currentSeason={currentSeason}
               />

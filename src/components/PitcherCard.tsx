@@ -1,5 +1,6 @@
 import type { PitcherScoutingReport } from '../types';
 import { PitchArsenalBar } from './PitchArsenalBar';
+import { PitchMixBar } from './PitchMixBar';
 import { SplitsTable } from './SplitsTable';
 import { availabilityToneClasses, type AvailabilityBadge } from '../utils/availability';
 
@@ -17,6 +18,8 @@ interface PitcherCardProps {
   statsRanked?: boolean;
   /** Recent-workload badge (pitched yesterday, 2 straight days, fresh). */
   availability?: AvailabilityBadge | null;
+  /** Render the arsenal as the sparkline mix bar instead of the full pie. */
+  compactArsenal?: boolean;
 }
 
 function HandChip({ hand }: { hand: 'L' | 'R' | 'S' }) {
@@ -146,7 +149,7 @@ function TextView({ report, role, currentSeason }: { report: PitcherScoutingRepo
   );
 }
 
-export function PitcherCard({ report, role, label, mode = 'full', currentSeason, fgTag, statsRanked, availability }: PitcherCardProps) {
+export function PitcherCard({ report, role, label, mode = 'full', currentSeason, fgTag, statsRanked, availability, compactArsenal }: PitcherCardProps) {
   const { bio, season, vsRHB, vsLHB, arsenal, seasonUsed } = report;
   const showFallbackBadge = seasonUsed !== currentSeason;
 
@@ -250,7 +253,11 @@ export function PitcherCard({ report, role, label, mode = 'full', currentSeason,
             <div className={`${compact ? 'text-[10px]' : 'text-xs'} font-semibold text-gray-600 uppercase tracking-wide mb-1`}>
               Arsenal
             </div>
-            <PitchArsenalBar arsenal={arsenal} compact={compact} />
+            {compactArsenal ? (
+              <PitchMixBar arsenal={arsenal} compact={compact} />
+            ) : (
+              <PitchArsenalBar arsenal={arsenal} compact={compact} />
+            )}
           </div>
         </>
       )}

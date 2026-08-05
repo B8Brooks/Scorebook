@@ -757,6 +757,17 @@ async function fetchArsenal(personId: number, season: number): Promise<PitchArse
   return parseArsenal(data?.stats?.[0]?.splits ?? []);
 }
 
+// Standalone arsenal lookup for pitchers who don't get a full scouting report
+// (e.g. rest-of-bullpen table rows). Same prior-season fallback as the report.
+export async function getPitcherArsenal(
+  personId: number,
+  season: number
+): Promise<PitchArsenalItem[]> {
+  const current = await fetchArsenal(personId, season);
+  if (current.length > 0) return current;
+  return fetchArsenal(personId, season - 1);
+}
+
 async function fetchPersonWithSeason(personId: number, season: number) {
   const res = await fetch(
     `${MLB_API_BASE}/people/${personId}?hydrate=stats(group=[pitching],type=[season],season=${season}),currentTeam`

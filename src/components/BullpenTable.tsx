@@ -1,6 +1,15 @@
 import type { RelieverRanking } from '../types';
 import type { PitcherCardMode } from './PitcherCard';
 import { availabilityFor, availabilityToneClasses } from '../utils/availability';
+import { PitchMixBar } from './PitchMixBar';
+
+function mixCaption(r: RelieverRanking): string {
+  if (!r.arsenal || r.arsenal.length === 0) return '';
+  return r.arsenal
+    .slice(0, 3)
+    .map(p => `${p.pitchType} ${Math.round(p.usagePct)}`)
+    .join(' · ');
+}
 
 interface BullpenTableProps {
   entries: RelieverRanking[];
@@ -21,6 +30,7 @@ export function BullpenTable({ entries, mode, scoutDate }: BullpenTableProps) {
               {r.role ?? 'Reliever'}: {r.name}
               {r.throws ? ` (${r.throws}HP)` : ''} — {r.era ?? '—'} ERA, {r.ip ?? '—'} IP,{' '}
               {r.whip ?? '—'} WHIP, {r.k9 ?? '—'} K/9, {r.saves ?? 0} SV / {r.holds ?? 0} HLD
+              {mixCaption(r) ? ` | ${mixCaption(r)}` : ''}
               {avail ? ` [${avail.label}]` : ''}
               {r.tags ? ` {${r.tags}}` : ''}
             </div>
@@ -47,6 +57,7 @@ export function BullpenTable({ entries, mode, scoutDate }: BullpenTableProps) {
             <th className={`text-right ${pad}`}>WHIP</th>
             <th className={`text-right ${pad}`}>K/9</th>
             <th className={`text-right ${pad}`}>SV/HLD</th>
+            <th className={`text-left ${pad}`}>Mix</th>
             <th className={`text-left ${pad}`}>Availability</th>
           </tr>
         </thead>
@@ -92,6 +103,9 @@ export function BullpenTable({ entries, mode, scoutDate }: BullpenTableProps) {
                 <td className={`text-right tabular-nums ${pad}`}>{r.k9 ?? '—'}</td>
                 <td className={`text-right tabular-nums ${pad}`}>
                   {r.saves ?? 0}/{r.holds ?? 0}
+                </td>
+                <td className={`${pad} min-w-[130px]`}>
+                  <PitchMixBar arsenal={r.arsenal ?? []} compact={compact} />
                 </td>
                 <td className={`${pad}`}>
                   {avail ? (
