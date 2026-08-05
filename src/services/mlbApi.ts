@@ -457,9 +457,13 @@ function normalizePlayerName(name: string): string {
     .trim();
 }
 
-async function fetchFangraphsBullpen(
-  teamId: number
-): Promise<Array<{ name: string; role: string; mlbamid?: number; tags?: string }> | null> {
+async function fetchFangraphsBullpen(teamId: number): Promise<Array<{
+  name: string;
+  role: string;
+  mlbamid?: number;
+  tags?: string;
+  recent?: Array<{ date: string; pitches?: number }>;
+}> | null> {
   try {
     const res = await fetch(`/api/fangraphs-bullpen?team=${teamId}`);
     if (!res.ok) return null;
@@ -496,9 +500,11 @@ export async function getTeamRelievers(
     holds: number;
     gs: number;
     gp: number;
+    line: Pick<RelieverRanking, 'throws' | 'era' | 'ip' | 'whip' | 'k9' | 'saves' | 'holds'>;
   }
 
   const candidates: Candidate[] = [];
+  const candidatesById = new Map<number, Candidate>();
   const pitchersByName = new Map<string, { id: number; name: string }>();
   const pitchersById = new Map<number, { id: number; name: string }>();
 
@@ -523,7 +529,8 @@ export async function getTeamRelievers(
     if (gp < 1) continue;
     if (gs / Math.max(gp, 1) >= 0.25) continue; // skip starters
 
-    candidates.push({
+    const handCode = person.pitchHand?.code;
+    const candidate: Candidate = {
       id: person.id,
       name: person.fullName,
       ip: parseIp(stat.inningsPitched),
@@ -533,7 +540,25 @@ export async function getTeamRelievers(
       holds: stat.holds ?? 0,
       gs,
       gp,
-    });
+      // Display line for the compact bullpen table — straight from this fetch,
+      // so table rows cost zero extra API calls.
+      line: {
+        throws: handCode === 'L' || handCode === 'R' || handCode === 'S' ? handCode : undefined,
+        era: stat.era != null ? String(stat.era) : undefined,
+        ip: stat.inningsPitched != null ? String(stat.inningsPitched) : undefined,
+        whip: stat.whip != null ? String(stat.whip) : undefined,
+        k9:
+          stat.strikeoutsPer9Inn != null
+            ? String(stat.strikeoutsPer9Inn)
+            : stat.strikeOutsPer9Inn != null
+              ? String(stat.strikeOutsPer9Inn)
+              : undefined,
+        saves: stat.saves ?? 0,
+        holds: stat.holds ?? 0,
+      },
+    };
+    candidates.push(candidate);
+    candidatesById.set(candidate.id, candidate);
   }
 
   // Saves dominate (closer signal); holds identify setup men; K/9 and ERA
@@ -545,11 +570,14 @@ export async function getTeamRelievers(
   };
   const statsRanked = [...candidates].sort((a, b) => statsScore(b) - statsScore(a));
 
+  const MAX_RELIEVERS = 10;
+  const MIN_RELIEVERS = 8;
   const matched: RelieverRanking[] = [];
   const seen = new Set<number>();
 
-  // Primary source: FanGraphs' editorial closer depth chart, in role order.
-  // Match by MLBAM id first (exact), falling back to a normalized name match.
+  // Primary source: FanGraphs' editorial closer depth chart, in role order —
+  // take everything they list (teams run 7-8 trustworthy arms). Match by MLBAM
+  // id first (exact), falling back to a normalized name match.
   const fgBullpen = await fetchFangraphsBullpen(teamId);
   if (fgBullpen && fgBullpen.length > 0) {
     let score = fgBullpen.length;
@@ -566,22 +594,24 @@ export async function getTeamRelievers(
           role: entry.role,
           tags: entry.tags,
           source: 'fangraphs',
+          recent: entry.recent,
+          ...(candidatesById.get(mlb.id)?.line ?? {}),
         });
         score -= 1;
       }
-      if (matched.length >= 6) break;
+      if (matched.length >= MAX_RELIEVERS) break;
     }
   }
 
-  // Top up to six from the stats ranking so the bullpen is always full.
+  // Top up from the stats ranking so the pen never looks thin.
   for (const c of statsRanked) {
-    if (matched.length >= 6) break;
+    if (matched.length >= MIN_RELIEVERS) break;
     if (seen.has(c.id)) continue;
     seen.add(c.id);
-    matched.push({ id: c.id, name: c.name, score: 0, source: 'stats' });
+    matched.push({ id: c.id, name: c.name, score: 0, source: 'stats', ...c.line });
   }
 
-  return matched.slice(0, 6);
+  return matched.slice(0, MAX_RELIEVERS);
 }
 
 function parseBio(person: any): PitcherBio {

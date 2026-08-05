@@ -39,6 +39,30 @@ interface BullpenEntry {
   role: string;
   mlbamid?: number;
   tags?: string;
+  // Last few appearances (newest first) from FG's pitcherUsage log, so the
+  // client can flag who pitched yesterday / is on back-to-back days.
+  recent?: Array<{ date: string; pitches?: number }>;
+}
+
+function parseRecent(usage: unknown): Array<{ date: string; pitches?: number }> | undefined {
+  if (!Array.isArray(usage) || usage.length === 0) return undefined;
+  const entries = usage
+    .map(u => {
+      const raw = String((u as Record<string, unknown>)?.gameDate ?? '');
+      const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (!m) return null;
+      const pitchesRaw = (u as Record<string, unknown>)?.pitches;
+      const pitches =
+        typeof pitchesRaw === 'number'
+          ? pitchesRaw
+          : Number.isFinite(parseInt(String(pitchesRaw), 10))
+            ? parseInt(String(pitchesRaw), 10)
+            : undefined;
+      return { date: `${m[1]}-${m[2]}-${m[3]}`, pitches };
+    })
+    .filter((e): e is { date: string; pitches?: number } => e !== null)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  return entries.length > 0 ? entries.slice(0, 4) : undefined;
 }
 
 const ROLE_ORDER: Record<string, number> = {
@@ -73,8 +97,16 @@ function extractNextData(html: string): unknown {
 
 // The closer depth chart embeds every reliever for all 30 teams in a react-query
 // cache at props.pageProps.dehydratedState.queries[].state.data.dataPlayers.
+interface LoosePayload {
+  props?: { pageProps?: LoosePagePropsShape };
+}
+interface LoosePagePropsShape {
+  dehydratedState?: { queries?: Array<{ state?: { data?: { dataPlayers?: unknown } } }> };
+  data?: { dataPlayers?: unknown };
+}
+
 function findDataPlayers(nextData: unknown): Record<string, unknown>[] {
-  const pageProps = (nextData as any)?.props?.pageProps;
+  const pageProps = (nextData as LoosePayload)?.props?.pageProps;
   const queries = pageProps?.dehydratedState?.queries;
   if (Array.isArray(queries)) {
     for (const q of queries) {
@@ -110,7 +142,8 @@ function parseTeamBullpen(
           ? parseInt(String(mlbamRaw), 10)
           : undefined;
     const tags = typeof p.Tags === 'string' && p.Tags.trim() ? p.Tags.trim() : undefined;
-    entries.push({ name, role: normalizeRole(rawRole), mlbamid, tags, order: i });
+    const recent = parseRecent(p.pitcherUsage);
+    entries.push({ name, role: normalizeRole(rawRole), mlbamid, tags, recent, order: i });
   });
 
   // Stable sort by role tier, preserving FanGraphs' within-tier order.
@@ -120,7 +153,7 @@ function parseTeamBullpen(
     return ra !== rb ? ra - rb : a.order - b.order;
   });
 
-  return entries.map(({ name, role, mlbamid, tags }) => ({ name, role, mlbamid, tags }));
+  return entries.map(({ name, role, mlbamid, tags, recent }) => ({ name, role, mlbamid, tags, recent }));
 }
 
 export default async function handler(req: Request): Promise<Response> {

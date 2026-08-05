@@ -297,4 +297,12 @@ export interface RelieverRanking {
   role?: string;
   tags?: string;
   source?: 'fangraphs' | 'stats';
+  throws?: 'L' | 'R' | 'S';
+  era?: string;
+  ip?: string;
+  whip?: string;
+  k9?: string;
+  saves?: number;
+  holds?: number;
+  recent?: Array<{ date: string; pitches?: number }>;
 }

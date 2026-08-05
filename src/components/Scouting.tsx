@@ -18,17 +18,25 @@ import {
 } from '../services/mlbApi';
 import { PitcherCard, type PitcherCardMode } from './PitcherCard';
 import { LineupSection } from './LineupSection';
+import { BullpenTable } from './BullpenTable';
+import { availabilityFor } from '../utils/availability';
+import type { RelieverRanking } from '../types';
 
 const RED_SOX_ID = 111;
 
 // A scouting report plus the depth-chart role (Closer/Setup/Middle Relief) it was
-// ranked at, the FanGraphs editorial tag (e.g. "On The Hot Seat"), and whether it
-// came from FanGraphs or the stats-ranking top-up.
+// ranked at, the FanGraphs editorial tag (e.g. "On The Hot Seat"), whether it
+// came from FanGraphs or the stats-ranking top-up, and recent workload.
 type BullpenReport = PitcherScoutingReport & {
   depthRole?: string;
   depthTags?: string;
   depthSource?: 'fangraphs' | 'stats';
+  depthRecent?: Array<{ date: string; pitches?: number }>;
 };
+
+// Only the top few arms get full cards; the rest of the pen renders as a
+// compact table so 7-8 reliever bullpens stay visible without doubling the page.
+const FULL_CARD_COUNT = 3;
 
 function todayIso(): string {
   return new Date().toISOString().split('T')[0];
@@ -56,6 +64,8 @@ export function Scouting() {
   const [awayStarter, setAwayStarter] = useState<PitcherScoutingReport | null>(null);
   const [opponentBullpen, setOpponentBullpen] = useState<BullpenReport[]>([]);
   const [selectedBullpen, setSelectedBullpen] = useState<BullpenReport[]>([]);
+  const [opponentBullpenRest, setOpponentBullpenRest] = useState<RelieverRanking[]>([]);
+  const [selectedBullpenRest, setSelectedBullpenRest] = useState<RelieverRanking[]>([]);
   const [opponentName, setOpponentName] = useState<string>('');
   const [selectedName, setSelectedName] = useState<string>('');
   const [opponentLineup, setOpponentLineup] = useState<TeamLineup | null>(null);
@@ -80,6 +90,8 @@ export function Scouting() {
     setAwayStarter(null);
     setOpponentBullpen([]);
     setSelectedBullpen([]);
+    setOpponentBullpenRest([]);
+    setSelectedBullpenRest([]);
     setOpponentName('');
     setSelectedName('');
     setOpponentLineup(null);
@@ -113,24 +125,36 @@ export function Scouting() {
 
       const loadBullpen = async (
         targetTeamId: number,
-        setter: (reports: BullpenReport[]) => void
+        setCards: (reports: BullpenReport[]) => void,
+        setRest: (rest: RelieverRanking[]) => void
       ) => {
         try {
           const rankings = await getTeamRelievers(targetTeamId, currentSeason);
+          // Full scouting reports only for the high-leverage arms; the rest of
+          // the pen renders straight from the ranking line (no extra fetches).
+          const cardRankings = rankings.slice(0, FULL_CARD_COUNT);
+          setRest(rankings.slice(FULL_CARD_COUNT));
           const reports = await Promise.all(
-            rankings.map(async (r): Promise<BullpenReport> => {
+            cardRankings.map(async (r): Promise<BullpenReport> => {
               const report = await getPitcherScoutingReport(r.id, currentSeason);
-              return { ...report, depthRole: r.role, depthTags: r.tags, depthSource: r.source };
+              return {
+                ...report,
+                depthRole: r.role,
+                depthTags: r.tags,
+                depthSource: r.source,
+                depthRecent: r.recent,
+              };
             })
           );
-          setter(reports);
+          setCards(reports);
         } catch {
-          setter([]);
+          setCards([]);
+          setRest([]);
         }
       };
 
-      tasks.push(loadBullpen(opponentSide.teamId, setOpponentBullpen));
-      tasks.push(loadBullpen(selectedSide.teamId, setSelectedBullpen));
+      tasks.push(loadBullpen(opponentSide.teamId, setOpponentBullpen, setOpponentBullpenRest));
+      tasks.push(loadBullpen(selectedSide.teamId, setSelectedBullpen, setSelectedBullpenRest));
 
       // Lineups + league-average OPS run in parallel with the pitcher fetches.
       const lineupsTask = (async () => {
@@ -323,6 +347,8 @@ export function Scouting() {
             }
             starterSide={probable!.home.teamId === teamId ? 'away' : 'home'}
             bullpen={opponentBullpen}
+            bullpenRest={opponentBullpenRest}
+            scoutDate={date}
             isFirstPage
             lineup={opponentLineup}
             // Opponent batters face the selected team's starter (Red Sox SP).
@@ -345,6 +371,8 @@ export function Scouting() {
             }
             starterSide={probable!.home.teamId === teamId ? 'home' : 'away'}
             bullpen={selectedBullpen}
+            bullpenRest={selectedBullpenRest}
+            scoutDate={date}
             isFirstPage={false}
             lineup={selectedLineup}
             // Red Sox batters face the opposing starter.
@@ -369,6 +397,8 @@ interface TeamPageProps {
   starter: PitcherScoutingReport | null;
   starterSide: 'home' | 'away';
   bullpen: BullpenReport[];
+  bullpenRest: RelieverRanking[];
+  scoutDate: string;
   isFirstPage: boolean;
   lineup: TeamLineup | null;
   opposingStarterHand?: 'L' | 'R' | 'S';
@@ -385,6 +415,8 @@ function TeamPage({
   starter,
   starterSide,
   bullpen,
+  bullpenRest,
+  scoutDate,
   isFirstPage,
   lineup,
   opposingStarterHand,
@@ -445,10 +477,10 @@ function TeamPage({
         )}
       </div>
 
-      {/* Bullpen */}
+      {/* Bullpen: full cards for the high-leverage arms... */}
       <div>
         <h3 className={`font-bold text-gray-900 mb-2 ${mode === 'print' ? 'text-xs' : 'text-lg'}`}>
-          Bullpen — Top 6
+          Bullpen — High Leverage
         </h3>
         {bullpen.length === 0 ? (
           <div className="text-sm italic text-gray-500 bg-white rounded-xl border border-gray-200 p-4">
@@ -464,6 +496,7 @@ function TeamPage({
                 label={r.depthRole ?? bullpenLabel(i)}
                 fgTag={r.depthTags}
                 statsRanked={bullpenIsMixed && r.depthSource === 'stats'}
+                availability={availabilityFor(scoutDate, r.depthRecent)}
                 mode={mode}
                 currentSeason={currentSeason}
               />
@@ -471,6 +504,16 @@ function TeamPage({
           </div>
         )}
       </div>
+
+      {/* ...and a compact table for everyone else in the pen. */}
+      {bullpenRest.length > 0 && (
+        <div>
+          <h3 className={`font-bold text-gray-900 mb-2 ${mode === 'print' ? 'text-xs' : 'text-lg'}`}>
+            Rest of the Bullpen
+          </h3>
+          <BullpenTable entries={bullpenRest} mode={mode} scoutDate={scoutDate} />
+        </div>
+      )}
 
       {/* Lineup */}
       {lineup && (

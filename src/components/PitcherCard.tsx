@@ -1,6 +1,7 @@
 import type { PitcherScoutingReport } from '../types';
 import { PitchArsenalBar } from './PitchArsenalBar';
 import { SplitsTable } from './SplitsTable';
+import { availabilityToneClasses, type AvailabilityBadge } from '../utils/availability';
 
 export type PitcherCardMode = 'full' | 'print' | 'text';
 
@@ -14,6 +15,8 @@ interface PitcherCardProps {
   fgTag?: string;
   /** True when this slot was filled by the stats ranking rather than FanGraphs. */
   statsRanked?: boolean;
+  /** Recent-workload badge (pitched yesterday, 2 straight days, fresh). */
+  availability?: AvailabilityBadge | null;
 }
 
 function HandChip({ hand }: { hand: 'L' | 'R' | 'S' }) {
@@ -143,7 +146,7 @@ function TextView({ report, role, currentSeason }: { report: PitcherScoutingRepo
   );
 }
 
-export function PitcherCard({ report, role, label, mode = 'full', currentSeason, fgTag, statsRanked }: PitcherCardProps) {
+export function PitcherCard({ report, role, label, mode = 'full', currentSeason, fgTag, statsRanked, availability }: PitcherCardProps) {
   const { bio, season, vsRHB, vsLHB, arsenal, seasonUsed } = report;
   const showFallbackBadge = seasonUsed !== currentSeason;
 
@@ -155,6 +158,7 @@ export function PitcherCard({ report, role, label, mode = 'full', currentSeason,
             {label}
             {fgTag ? ` — ${fgTag}` : ''}
             {statsRanked ? ' (stats-ranked)' : ''}
+            {availability ? ` [${availability.label}]` : ''}
           </div>
         )}
         <TextView report={report} role={role} currentSeason={currentSeason} />
@@ -183,6 +187,11 @@ export function PitcherCard({ report, role, label, mode = 'full', currentSeason,
           {statsRanked && (
             <span className={`inline-flex items-center ${chipText} font-semibold rounded bg-gray-100 text-gray-600 border border-gray-200`}>
               stats-ranked
+            </span>
+          )}
+          {availability && (
+            <span className={`inline-flex items-center ${chipText} font-semibold rounded border ${availabilityToneClasses(availability.tone)}`}>
+              {availability.label}
             </span>
           )}
         </div>
