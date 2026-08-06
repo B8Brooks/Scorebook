@@ -238,9 +238,21 @@ export function Scouting() {
     }
   }, [date, teamId, currentSeason]);
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const handlePrint = useCallback(() => {
+    // Always print the compact one-pager, whatever view is on screen.
+    if (mode === 'print') {
+      window.print();
+      return;
+    }
+    const previous = mode;
+    setMode('print');
+    // Let React paint the compact layout before the dialog opens; window.print
+    // blocks until the dialog closes, so we can restore right after.
+    setTimeout(() => {
+      window.print();
+      setMode(previous);
+    }, 150);
+  }, [mode]);
 
   const hasReport = probable !== null;
   const matchupHeader = probable
@@ -339,7 +351,7 @@ export function Scouting() {
 
       {/* Report */}
       {hasReport && (
-        <div className={`scouting-report ${mode === 'print' ? 'space-y-3' : 'space-y-6'}`}>
+        <div className={`scouting-report ${mode === 'print' ? 'space-y-2' : 'space-y-6'}`}>
           {/* Page 1: Opponent (front) */}
           <TeamPage
             team="opponent"
@@ -442,15 +454,15 @@ function TeamPage({
     mode === 'print' && !isFirstPage ? 'scouting-page-break' : '';
 
   return (
-    <section className={`scouting-page space-y-3 ${pageBreakClass}`}>
+    <section className={`scouting-page ${mode === 'print' ? 'space-y-1' : 'space-y-3'} ${pageBreakClass}`}>
       {/* Team header */}
-      <div className={`bg-white rounded-xl border border-gray-200 ${mode === 'print' ? 'p-3' : 'p-5 shadow-sm'}`}>
+      <div className={`bg-white rounded-xl border border-gray-200 ${mode === 'print' ? 'px-3 py-1' : 'p-5 shadow-sm'}`}>
         <div className="flex items-baseline justify-between gap-2 flex-wrap">
           <div>
-            <div className={`${mode === 'print' ? 'text-[10px]' : 'text-xs'} text-gray-500 uppercase tracking-wide font-semibold`}>
+            <div className={`${mode === 'print' ? 'text-[9px]' : 'text-xs'} text-gray-500 uppercase tracking-wide font-semibold`}>
               {sectionLabel} — Pitching
             </div>
-            <div className={`${mode === 'print' ? 'text-lg' : 'text-2xl'} font-bold text-gray-900`}>
+            <div className={`${mode === 'print' ? 'text-base leading-tight' : 'text-2xl'} font-bold text-gray-900`}>
               {teamName}
             </div>
           </div>
@@ -464,7 +476,7 @@ function TeamPage({
 
       {/* Starter — full width, large */}
       <div>
-        <h3 className={`font-bold text-gray-900 mb-2 ${mode === 'print' ? 'text-xs' : 'text-lg'}`}>
+        <h3 className={`font-bold text-gray-900 ${mode === 'print' ? 'text-[9px] mb-0.5' : 'text-lg mb-2'}`}>
           Probable Starter
         </h3>
         {starter ? (
@@ -486,7 +498,7 @@ function TeamPage({
 
       {/* Bullpen: full cards for the high-leverage arms... */}
       <div>
-        <h3 className={`font-bold text-gray-900 mb-2 ${mode === 'print' ? 'text-xs' : 'text-lg'}`}>
+        <h3 className={`font-bold text-gray-900 ${mode === 'print' ? 'text-[9px] mb-0.5' : 'text-lg mb-2'}`}>
           Bullpen — High Leverage
         </h3>
         {bullpen.length === 0 ? (
@@ -516,7 +528,7 @@ function TeamPage({
       {/* ...and a compact table for everyone else in the pen. */}
       {bullpenRest.length > 0 && (
         <div>
-          <h3 className={`font-bold text-gray-900 mb-2 ${mode === 'print' ? 'text-xs' : 'text-lg'}`}>
+          <h3 className={`font-bold text-gray-900 ${mode === 'print' ? 'text-[9px] mb-0.5' : 'text-lg mb-2'}`}>
             Rest of the Bullpen
           </h3>
           <BullpenTable entries={bullpenRest} mode={mode} scoutDate={scoutDate} />
@@ -526,7 +538,7 @@ function TeamPage({
       {/* Lineup */}
       {lineup && (
         <div>
-          <h3 className={`font-bold text-gray-900 mb-2 ${mode === 'print' ? 'text-xs' : 'text-lg'}`}>
+          <h3 className={`font-bold text-gray-900 ${mode === 'print' ? 'text-[9px] mb-0.5' : 'text-lg mb-2'}`}>
             Lineup — {teamName}
           </h3>
           <LineupSection

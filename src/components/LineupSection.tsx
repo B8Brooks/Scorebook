@@ -7,6 +7,8 @@ interface LineupSectionProps {
   opposingStarterHand?: 'L' | 'R' | 'S';
 }
 
+const badgePad = (compact: boolean) => (compact ? 'px-1 py-0' : 'px-1.5 py-0.5');
+
 function opsClass(opsStr: string): string {
   const ops = parseFloat(opsStr);
   if (!Number.isFinite(ops) || ops === 0) return 'text-gray-400';
@@ -30,7 +32,7 @@ function BatSideChip({ side }: { side: 'L' | 'R' | 'S' }) {
         ? 'bg-red-100 text-red-800 border-red-200'
         : 'bg-purple-100 text-purple-800 border-purple-200';
   return (
-    <span className={`inline-flex items-center justify-center text-[9px] font-bold px-1 py-0.5 rounded border ${tone}`}>
+    <span className={`inline-flex items-center justify-center text-[9px] font-bold px-1 py-0 rounded border ${tone}`}>
       {side}
     </span>
   );
@@ -56,7 +58,7 @@ export function LineupSection({ lineup, mode, opposingStarterHand }: LineupSecti
   }
 
   const textSize = compact ? 'text-[10px]' : 'text-xs';
-  const padY = compact ? 'py-0.5' : 'py-1';
+  const padY = compact ? 'py-px' : 'py-1';
   const padX = compact ? 'px-1' : 'px-2';
 
   return (
@@ -144,12 +146,12 @@ function BenchPanel({
                 <BatSideChip side={b.batSide} />
               </td>
               <td className={`text-center ${padX} ${padY}`}>
-                <span className={`inline-block px-1.5 py-0.5 rounded tabular-nums ${opsClass(b.ops)}`}>
+                <span className={`inline-block ${badgePad(padY === 'py-px')} rounded tabular-nums ${opsClass(b.ops)}`}>
                   {b.ops}
                 </span>
               </td>
               <td className={`text-center ${padX} ${padY}`}>
-                <span className={`inline-block px-1.5 py-0.5 rounded tabular-nums ${opsPlusClass(b.opsPlus)}`}>
+                <span className={`inline-block ${badgePad(padY === 'py-px')} rounded tabular-nums ${opsPlusClass(b.opsPlus)}`}>
                   {b.opsPlus ?? '—'}
                 </span>
               </td>
@@ -201,12 +203,12 @@ function BatterRow({
         {batter.avg} / {batter.obp} / {batter.slg}
       </td>
       <td className={`text-center ${padX} ${padY}`}>
-        <span className={`inline-block px-1.5 py-0.5 rounded tabular-nums ${opsClass(batter.ops)}`}>
+        <span className={`inline-block ${badgePad(padY === 'py-px')} rounded tabular-nums ${opsClass(batter.ops)}`}>
           {batter.ops}
         </span>
       </td>
       <td className={`text-center ${padX} ${padY}`}>
-        <span className={`inline-block px-1.5 py-0.5 rounded tabular-nums ${opsPlusClass(batter.opsPlus)}`}>
+        <span className={`inline-block ${badgePad(padY === 'py-px')} rounded tabular-nums ${opsPlusClass(batter.opsPlus)}`}>
           {batter.opsPlus ?? '—'}
         </span>
       </td>

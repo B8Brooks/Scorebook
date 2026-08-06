@@ -28,26 +28,31 @@ function SplitPanel({ split, label, compact }: { split: HandednessSplit | null; 
   const tone = smallSample ? 'bg-gray-50 border-gray-200 text-gray-600' : opsClass(split.ops);
 
   return (
-    <div className={`flex-1 border rounded-lg ${compact ? 'p-2' : 'p-3'} ${tone}`}>
+    <div className={`flex-1 border rounded-lg ${compact ? 'p-1' : 'p-3'} ${tone}`}>
       <div className="flex items-baseline justify-between">
         <div className={`font-semibold uppercase tracking-wide ${compact ? 'text-[10px]' : 'text-xs'}`}>
           {label}
         </div>
-        <div className={`${compact ? 'text-lg' : 'text-2xl'} font-bold tabular-nums leading-none`}>
+        <div className={`${compact ? 'text-sm' : 'text-2xl'} font-bold tabular-nums leading-none`}>
           {split.ops}
         </div>
       </div>
-      <div className={`mt-1 tabular-nums ${compact ? 'text-[10px]' : 'text-xs'}`}>
+      <div className={`mt-0.5 tabular-nums ${compact ? 'text-[9px]' : 'text-xs'}`}>
         {split.avg} / {split.obp} / {split.slg}
+        {compact && (
+          <span className="text-gray-500"> · PA{split.pa} K{split.so} BB{split.bb} HR{split.hr}</span>
+        )}
       </div>
-      <div className={`mt-1 flex gap-2 ${compact ? 'text-[10px]' : 'text-xs'} text-gray-700`}>
-        <span>PA {split.pa}</span>
-        <span>K {split.so}</span>
-        <span>BB {split.bb}</span>
-        <span>HR {split.hr}</span>
-      </div>
-      {smallSample && (
-        <div className={`mt-1 italic text-gray-500 ${compact ? 'text-[9px]' : 'text-[10px]'}`}>
+      {!compact && (
+        <div className="mt-1 flex gap-2 text-xs text-gray-700">
+          <span>PA {split.pa}</span>
+          <span>K {split.so}</span>
+          <span>BB {split.bb}</span>
+          <span>HR {split.hr}</span>
+        </div>
+      )}
+      {smallSample && !compact && (
+        <div className="mt-1 italic text-gray-500 text-[10px]">
           small sample
         </div>
       )}

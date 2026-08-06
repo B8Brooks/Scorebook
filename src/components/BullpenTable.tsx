@@ -42,7 +42,7 @@ export function BullpenTable({ entries, mode, scoutDate }: BullpenTableProps) {
 
   const compact = mode === 'print';
   const textSize = compact ? 'text-[10px]' : 'text-xs';
-  const pad = compact ? 'px-1.5 py-0.5' : 'px-2 py-1';
+  const pad = compact ? 'px-1.5 py-px' : 'px-2 py-1';
 
   return (
     <div className={`bg-white rounded-xl border border-gray-200 overflow-x-auto ${compact ? '' : 'shadow-sm'}`}>

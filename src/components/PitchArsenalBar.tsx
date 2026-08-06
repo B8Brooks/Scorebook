@@ -34,28 +34,31 @@ export function PitchArsenalBar({ arsenal, compact = false }: PitchArsenalProps)
   const total = arsenal.reduce((sum, a) => sum + a.usagePct, 0) || 100;
 
   // Layout constants — scaled for compact vs full.
-  const W = compact ? 260 : 320;
-  const r = compact ? 40 : 50;
-  const rowHeight = compact ? 22 : 26;
+  const W = compact ? 240 : 320;
+  const r = compact ? 28 : 50;
+  const rowHeight = compact ? 16 : 26;
   const legendHeight = rowHeight * arsenal.length + (compact ? 10 : 14);
   // The viewBox must fit whichever is taller: the legend rows or the pie itself.
   // Legend-only sizing clipped the pie for 2-3 pitch arsenals (most relievers).
   const H = Math.max(legendHeight, 2 * r + 8);
-  const cx = compact ? 50 : 60;
+  const cx = compact ? 36 : 60;
   const cy = H / 2;
-  const legendX = compact ? 120 : 140;
+  const legendX = compact ? 100 : 140;
   const lineEndX = legendX - 8;
   const legendTop = (H - rowHeight * arsenal.length) / 2 + rowHeight / 2;
   const codeFont = compact ? 9 : 11;
   const nameFont = compact ? 9 : 10;
   const statFont = compact ? 9 : 10;
 
-  let cursor = 0;
+  // Cumulative start angle per slice, computed without render-time mutation.
+  const startAngles = arsenal.reduce<number[]>((acc, _pitch, i) => {
+    acc.push(i === 0 ? 0 : acc[i - 1] + (arsenal[i - 1].usagePct / total) * 360);
+    return acc;
+  }, []);
   const slices = arsenal.map((pitch, i) => {
     const sweep = (pitch.usagePct / total) * 360;
-    const startAngle = cursor;
-    const endAngle = cursor + sweep;
-    cursor += sweep;
+    const startAngle = startAngles[i];
+    const endAngle = startAngle + sweep;
     const mid = (startAngle + endAngle) / 2;
     const outer = polarToCartesian(cx, cy, r, mid);
     // Elbow point slightly beyond the pie edge so lines leave radially
@@ -117,14 +120,17 @@ export function PitchArsenalBar({ arsenal, compact = false }: PitchArsenalProps)
           >
             {slice.pitch.pitchType}
           </text>
-          <text
-            x={lineEndX + 10 + codeFont * 1.8}
-            y={slice.legendY + nameFont / 3}
-            fontSize={nameFont}
-            fill="#4b5563"
-          >
-            {slice.pitch.pitchName}
-          </text>
+          {/* Full pitch name only when there's room; compact keeps code + stats. */}
+          {!compact && (
+            <text
+              x={lineEndX + 10 + codeFont * 1.8}
+              y={slice.legendY + nameFont / 3}
+              fontSize={nameFont}
+              fill="#4b5563"
+            >
+              {slice.pitch.pitchName}
+            </text>
+          )}
           <text
             x={W - 2}
             y={slice.legendY + statFont / 3}

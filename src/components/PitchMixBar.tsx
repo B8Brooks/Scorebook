@@ -30,7 +30,7 @@ export function PitchMixBar({ arsenal, compact = false }: PitchMixBarProps) {
 
   return (
     <div title={fullBreakdown(arsenal)} className="min-w-0">
-      <div className={`flex ${compact ? 'h-2' : 'h-2.5'} rounded overflow-hidden border border-gray-200`}>
+      <div className={`flex ${compact ? 'h-1.5' : 'h-2.5'} rounded overflow-hidden border border-gray-200`}>
         {arsenal.map(pitch => (
           <div
             key={pitch.pitchType}
@@ -39,7 +39,7 @@ export function PitchMixBar({ arsenal, compact = false }: PitchMixBarProps) {
           />
         ))}
       </div>
-      <div className={`mt-0.5 ${compact ? 'text-[9px]' : 'text-[10px]'} text-gray-600 whitespace-nowrap tabular-nums`}>
+      <div className={`${compact ? 'mt-0 text-[9px] leading-tight' : 'mt-0.5 text-[10px]'} text-gray-600 whitespace-nowrap tabular-nums`}>
         {top.map((pitch, i) => (
           <span key={pitch.pitchType}>
             {i > 0 && <span className="text-gray-300"> · </span>}

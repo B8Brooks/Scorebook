@@ -36,11 +36,11 @@ function HandChip({ hand }: { hand: 'L' | 'R' | 'S' }) {
   );
 }
 
-function StatCell({ label, value }: { label: string; value: string | number }) {
+function StatCell({ label, value, compact }: { label: string; value: string | number; compact?: boolean }) {
   return (
     <div className="flex flex-col items-center justify-center px-1">
-      <div className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">{label}</div>
-      <div className="text-sm font-bold text-gray-900 tabular-nums">{value}</div>
+      <div className={`${compact ? 'text-[8px]' : 'text-[10px]'} uppercase tracking-wide text-gray-500 font-semibold`}>{label}</div>
+      <div className={`${compact ? 'text-xs' : 'text-sm'} font-bold text-gray-900 tabular-nums`}>{value}</div>
     </div>
   );
 }
@@ -75,9 +75,9 @@ function SeasonStrip({
         ];
 
   return (
-    <div className={`grid grid-cols-6 ${compact ? 'gap-0.5 py-1' : 'gap-1 py-2'} border-y border-gray-200 bg-gray-50 rounded`}>
+    <div className={`grid grid-cols-6 ${compact ? 'gap-0.5 py-0.5' : 'gap-1 py-2'} border-y border-gray-200 bg-gray-50 rounded`}>
       {cells.map(c => (
-        <StatCell key={c.label} {...c} />
+        <StatCell key={c.label} {...c} compact={compact} />
       ))}
     </div>
   );
@@ -101,7 +101,7 @@ function RateStatsRow({
   return (
     <div className={`grid grid-cols-4 ${compact ? 'gap-0.5 py-0.5 mt-0.5' : 'gap-1 py-1 mt-1'} border-b border-gray-200`}>
       {cells.map(c => (
-        <StatCell key={c.label} {...c} />
+        <StatCell key={c.label} {...c} compact={compact} />
       ))}
     </div>
   );
@@ -170,7 +170,7 @@ export function PitcherCard({ report, role, label, mode = 'full', currentSeason,
   }
 
   const compact = mode === 'print';
-  const cardPadding = compact ? 'p-3' : 'p-4 sm:p-5';
+  const cardPadding = compact ? 'p-2' : 'p-4 sm:p-5';
   const shadow = compact ? '' : 'shadow-sm';
   const borderColor = compact ? 'border-gray-300' : 'border-gray-200';
   const chipText = compact ? 'text-[9px] px-1 py-0.5' : 'text-[10px] px-1.5 py-0.5';
@@ -178,7 +178,7 @@ export function PitcherCard({ report, role, label, mode = 'full', currentSeason,
   return (
     <div className={`pitcher-card bg-white rounded-lg border ${borderColor} ${shadow} ${cardPadding} flex flex-col`}>
       {label && (
-        <div className={`flex items-center gap-1.5 flex-wrap mb-1`}>
+        <div className={`flex items-center gap-1.5 flex-wrap ${compact ? 'mb-0.5' : 'mb-1'}`}>
           <span className={`${compact ? 'text-[10px]' : 'text-xs'} font-semibold text-green-700 uppercase tracking-wide`}>
             {label}
           </span>
@@ -201,7 +201,7 @@ export function PitcherCard({ report, role, label, mode = 'full', currentSeason,
       )}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className={`font-bold text-gray-900 ${compact ? 'text-base leading-tight' : 'text-lg'} truncate`}>
+          <div className={`font-bold text-gray-900 ${compact ? 'text-sm leading-tight' : 'text-lg'} truncate`}>
             {bio.fullName}
           </div>
           <div className={`flex items-center gap-1.5 mt-0.5 ${compact ? 'text-[10px]' : 'text-xs'} text-gray-600`}>
@@ -218,7 +218,7 @@ export function PitcherCard({ report, role, label, mode = 'full', currentSeason,
         )}
       </div>
 
-      <div className={compact ? 'mt-2' : 'mt-3'}>
+      <div className={compact ? 'mt-1' : 'mt-3'}>
         {season ? (
           <>
             <SeasonStrip season={season} role={role} compact={compact} />
@@ -230,7 +230,7 @@ export function PitcherCard({ report, role, label, mode = 'full', currentSeason,
       </div>
 
       {role === 'Starter' ? (
-        <div className={`${compact ? 'mt-2' : 'mt-3'} grid grid-cols-1 sm:grid-cols-2 gap-3`}>
+        <div className={`${compact ? 'mt-1' : 'mt-3'} grid grid-cols-1 sm:grid-cols-2 ${compact ? 'gap-2' : 'gap-3'}`}>
           <div>
             <div className={`${compact ? 'text-[10px]' : 'text-xs'} font-semibold text-gray-600 uppercase tracking-wide mb-1`}>
               Splits
@@ -246,10 +246,10 @@ export function PitcherCard({ report, role, label, mode = 'full', currentSeason,
         </div>
       ) : (
         <>
-          <div className={compact ? 'mt-2' : 'mt-3'}>
+          <div className={compact ? 'mt-1' : 'mt-3'}>
             <SplitsTable vsRHB={vsRHB} vsLHB={vsLHB} compact={compact} />
           </div>
-          <div className={compact ? 'mt-2' : 'mt-3'}>
+          <div className={compact ? 'mt-1' : 'mt-3'}>
             <div className={`${compact ? 'text-[10px]' : 'text-xs'} font-semibold text-gray-600 uppercase tracking-wide mb-1`}>
               Arsenal
             </div>

@@ -8,10 +8,14 @@ body {
 @media print {
   @page {
     size: letter portrait;
-    margin: 0.4in;
+    margin: 0.25in;
   }
   html,
   body {
+    background: white !important;
+  }
+  .min-h-screen {
+    min-height: 0 !important;
     background: white !important;
   }
   header,
